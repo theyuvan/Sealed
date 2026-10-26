@@ -1,0 +1,32 @@
+{
+  "name": "sealed",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "services/*"
+  ],
+  "scripts": {
+    "tools": "node scripts/install-tools.mjs",
+    "test": "npm run test:core && npm run test:circuits && npm run test:contracts && npm run test:services && npm run test:e2e",
+    "test:core": "vitest run --project backend packages/core",
+    "test:circuits": "vitest run --project circuits",
+    "test:contracts": "node scripts/forge.mjs test",
+    "test:services": "vitest run --project backend services",
+    "test:e2e": "vitest run --project backend tests/e2e",
+    "circuits:setup": "node ../circuits/scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "deploy": "node scripts/deploy.mjs",
+    "fund": "node --import tsx scripts/fund.ts",
+    "e2e": "node --import tsx scripts/e2e.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "circuits:fixtures": "tsx packages/prover/scripts/gen-fixtures.ts",
+    "export-abis": "node scripts/export-abis.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}
