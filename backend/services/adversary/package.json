@@ -1,0 +1,9 @@
+{
+  "name": "@sealed/adversary",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/adversary.ts" },
+  "scripts": { "start": "tsx src/main.ts" },
+  "dependencies": { "@sealed/core": "*" }
+}
