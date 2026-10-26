@@ -1,0 +1,15 @@
+{
+  "name": "@sealed/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "poseidon-lite": "^0.3.0",
+    "viem": "^2.37.0",
+    "zod": "^3.25.0"
+  }
+}
