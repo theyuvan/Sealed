@@ -1,15 +1,70 @@
-# Sealed backend — task list
+# Sealed: task list
 
-- [x] Repo layout: `circuits/`, `contracts/`, `backend/` (all Node code, deps and config); run commands from `backend/` — see `backend/RUNNING.md`
-- [x] Toolchain: Foundry 1.8.6 + Circom 2.2.3 in `backend/.tools/bin` (`npm run tools`)
-- [x] `backend/packages/core` — Poseidon, note format, Merkle mirror, EIP-712, quotes, HSP wire/crypto/client, chain config, ECIES, offer policy — tests passing
-- [x] `circuits/` — spend.circom (~19k constraints), setup script (PSE ppot phase 1 + hackathon phase 2), verifier export, 12 tests (`circuits/test`, prover in `backend/packages/prover`)
-- [x] `contracts/` — MandateRegistry, SessionEscrow, SpendVerifier, Poseidon libs, Deploy.s.sol, 52 tests (unit, fuzz, real-proof, invariants)
-- [x] `backend/services/vault` — 15 tests against anvil with real proofs
-- [x] `backend/services/coordinator` (+ HSP local stand-in) — 8 tests (webhooks, polling, chain checks, receipts)
-- [x] `backend/services/sellers` (honest-1, honest-2, rogue) — 8 tests
-- [x] `backend/services/buyer-agent` — Claude tool loop + scripted driver, 5 tests (+1 live LLM, skipped without key)
-- [x] `backend/services/adversary` — 5 tests; baseline 0.0% vs Sealed 9.2% inference error (algorithm-aware adversary)
-- [x] `backend/scripts/` dev, deploy, fund, e2e, install-tools, auditor-decrypt; e2e tests: happy path + 6 rogue attacks (all fail)
-- [ ] Fill TODO(HSP-DOCS) items from the HSP manual (see backend/RUNNING.md)
-- [ ] Testnet deploy + real HSP run; mainnet deploy (needs approval)
+Deadline: **Nov 1, 21:30 IST**. How to run everything: [backend/RUNNING.md](backend/RUNNING.md).
+
+## Done
+
+### Repository and tooling
+- [x] Layout: `circuits/`, `contracts/`, `backend/` (all Node code, dependencies and config)
+- [x] Foundry 1.8.6 and Circom 2.2.3, downloaded into `backend/.tools/bin` with `npm run tools`
+- [x] One-command local stack (`npm run dev`) and full-flow script (`npm run e2e`), both run end to end
+
+### Circuits (`circuits/`)
+- [x] `spend.circom`, about 19k constraints. Proves: the note is in the registry tree, nullifier and revocation tag are correct, amount ≤ per-deal cap and ≤ remaining budget, category and seller are in the allow-lists, token is the pinned one, mandate not expired, new note is correct, cart, session and session key are bound
+- [x] Setup script: PSE Perpetual Powers of Tau (phase 1) plus a hackathon phase 2, exports `SpendVerifier.sol`
+- [x] 12 tests: valid spend, over per-deal cap, over remaining budget, seller not allowed, wrong category, wrong token, expired, reused or forged nullifier, revoked or forged tag, wrong root, public-signal binding
+
+### Contracts (`contracts/`)
+- [x] `MandateRegistry`: Poseidon Merkle tree (depth 20, root history), nullifier set, revocation, auditor ciphertext events
+- [x] `SessionEscrow`: open with proof, mark funded after the HSP transfer, close with vouchers, close after deadline, refunds, receipts
+- [x] Generated `SpendVerifier`, Poseidon libraries, dev EIP-3009 token (local only), `Deploy.s.sol` for chains 133, 177 and local
+- [x] 52 tests: unit, fuzz (512 runs), real Groth16 proofs, 6 invariants (paid + refunded = funded, paid ≤ cap, escrow solvent, nullifier used once, no session without a valid proof, revoked mandates and lookalike tokens can't open)
+
+### Backend (`backend/`)
+- [x] `packages/core`: notes, Merkle tree, EIP-712 vouchers, signed quotes, offer policy, auditor encryption, chain config, HSP wire format, signing and client
+- [x] `packages/prover`: witness building, Groth16 proving, verifier calldata
+- [x] `services/vault`: seal, revoke, rotate; randomized offer policy; probe limits; spend proofs; voucher signing; admin and agent tokens kept separate (15 tests)
+- [x] `services/coordinator`: creates HSP orders, checks webhook signatures, polls HSP, checks the transfer on chain, calls `markFunded`, serves receipts (8 tests)
+- [x] `services/hsp-standin`: "HSP local stand-in" for development; switched on with `HSP_LOCAL_STANDIN=1`, refused on mainnet
+- [x] `services/sellers`: honest-1, honest-2, rogue; signed quotes, x402-style delivery with pre-committed hashes, voucher claims, live chain data (8 tests)
+- [x] `services/buyer-agent`: Claude tool loop (`claude-opus-5-5`) plus a scripted driver; deterministic delivery checks before any voucher (5 tests)
+- [x] `services/adversary`: budget-inference error is 0.0% for a budget-in-prompt baseline vs 9.2% for Sealed (5 tests)
+- [x] E2E tests: happy path, plus all 6 rogue attacks (injection, urgent fee, probing, trajectory inference, cart swap, proof replay), all of which fail
+- [x] Scripts: `dev`, `deploy` (asks before mainnet), `fund`, `e2e`, `install-tools`, `export-abis`, `auditor-decrypt`
+
+### Git
+- [x] 15 commits pushed to `github.com/theyuvan/Sealed` (`main`)
+
+## Left
+
+### Blocked on HashKey (HSP)
+- [ ] Get HSP merchant credentials: app key, app secret, register the merchant public key, webhook secret
+- [ ] Fill every `TODO(HSP-DOCS)` value from the official HSP manual. The full list of 10 items is in `backend/RUNNING.md`: base URLs, endpoint paths, signing headers and message layout, response envelope, JWT claims, cart and payment mandate fields, webhook format, status values
+- [ ] Confirm with HashKey (README §14):
+  - [ ] Which stablecoin HSP settles on mainnet, and its address
+  - [ ] That this token supports EIP-3009 and emits `AuthorizationUsed`
+  - [ ] Whether HSP relays `transferWithAuthorization` (`receiveWithAuthorization` would break the escrow as payee)
+  - [ ] Whether an order's `pay_to` can be a contract (the escrow)
+  - [ ] Whether HSP supports testnet 133, and whether it needs payer identity beyond the paying wallet
+- [ ] Set `PINNED_TOKEN` to the verified stablecoin address
+
+### Deploy and run for real
+- [ ] Fill `backend/.env` from `backend/.env.example` (real keys, distinct vault tokens, auditor key)
+- [ ] Testnet: `npm run deploy -- --network testnet`, fund gas, then run the flow against real HSP
+- [ ] Check the HSK RPC log-range limit (`LOGS_CHUNK`) and whether `--legacy` gas is needed
+- [ ] Host the coordinator's `/hsp/webhook` over HTTPS and register the URL with HashKey
+- [ ] Mainnet deploy, then verify the contracts on Blockscout (needs approval: spends real HSK)
+- [ ] One real mainnet settlement: proof → HSP funding → calls → close → receipt (spends real stablecoin)
+
+### Agent and demo
+- [ ] Run the live-LLM tests with an Anthropic key (2 tests are skipped without one)
+- [ ] Set `DATA_ASSETS` to real tokenized-asset contracts so the sellers' data products describe real assets
+- [ ] Frontend (not part of this backend work)
+- [ ] Demo recording (README §13) and a budget-inference chart from `services/adversary`
+- [ ] Update README §5 (repository layout) to the new `circuits/` / `contracts/` / `backend/` structure
+
+### Hardening (after the hackathon, or if time allows)
+- [ ] Encrypt the Vault's SQLite database at rest (mandate secrets are stored in plain text locally)
+- [ ] Production trusted-setup ceremony; phase 2 is currently a single-party hackathon setup
+- [ ] Separate HSP merchant accounts per seller (today the coordinator creates orders for all sellers)
+- [ ] Stretch / v2 (README): re-credit unused session cap to the sealed budget; prove the auditor ciphertext inside the circuit
