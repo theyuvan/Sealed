@@ -1,0 +1,10 @@
+{
+  "name": "@sealed/hsp-standin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "HSP local stand-in (development only, not operated by HashKey)",
+  "exports": { ".": "./src/standin.ts" },
+  "scripts": { "start": "tsx src/main.ts" },
+  "dependencies": { "@sealed/core": "*", "fastify": "^5.6.0", "viem": "^2.37.0" }
+}
