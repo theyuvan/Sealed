@@ -1,0 +1,14 @@
+{
+  "name": "@sealed/prover",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@sealed/core": "*",
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.6"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}
