@@ -1,0 +1,23 @@
+node_modules/
+.tools/
+.env
+.env.local
+*.sqlite
+*.sqlite-*
+data/
+logs/
+
+# circuits: large or regenerable artifacts
+circuits/build/ptau/
+circuits/build/*.r1cs
+circuits/build/*.sym
+circuits/build/spend_0000.zkey
+circuits/build/spend_js/*.js
+!circuits/build/spend_js/spend.wasm
+
+# foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/*/31337/
+contracts/deployments/31337.json
+contracts/deployments/test-*.json
