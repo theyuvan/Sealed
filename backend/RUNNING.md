@@ -22,8 +22,8 @@ All commands below run from `backend/`.
 cd backend
 npm install
 npm run dev        # anvil + deploy + fund + HSP local stand-in + coordinator + vault + sellers + buyer agent
-npm run e2e        # in a second terminal: seal -> negotiate -> prove -> open -> fund via HSP -> vouchers -> close -> receipt
-npm run e2e -- --llm   # same, driven by the Claude buyer agent (needs LLM_API_KEY or an Anthropic credential)
+npm run e2e:local  # in a second terminal: seal -> negotiate -> prove -> open -> fund via HSP -> vouchers -> close -> receipt
+npm run e2e:local -- --llm   # same, driven by the LLM buyer agent (Gemini by default)
 ```
 
 What `npm run dev` does:
@@ -54,6 +54,23 @@ Other tools:
 | `npm run fund` | Balances of every service wallet. `-- --send-gas 0.5` sends HSK for gas and asks first. |
 | `npx tsx services/adversary/src/main.ts --runs 2000` | Budget-inference report (`--live` scores the Vault's recorded traces). |
 | `npx tsx scripts/auditor-decrypt.ts` | Auditor view of sealed rules (needs `AUDITOR_PRIVATE_KEY`). |
+
+## Run on HSK testnet
+
+Already deployed (see `contracts/deployments/133.json`); `backend/.env` holds the testnet config and wallets.
+
+```bash
+cd backend
+npm start                                   # services against the chain in backend/.env (HSP local stand-in while HSP_LOCAL_STANDIN=1)
+npm run e2e                                 # scripted buyer, in a second terminal
+E2E_SELLER_URL=http://127.0.0.1:7102 npm run e2e -- --llm   # Gemini buyer agent
+npm run fund                                # wallet balances; --send-gas / --mint-dev to top up
+```
+
+Notes from the testnet runs:
+- The Vault allows 3 negotiations per seller (kept across mandates). When a seller is used up, point `E2E_SELLER_URL` at another one.
+- Gemini free tier: 20 requests/day per model, and one purchase is about 13–15 requests. Change `GEMINI_MODEL` or enable billing when it runs out.
+- `npm run e2e:local` runs against the local stack from `npm run dev` (`.env.local`).
 
 ## Tests
 

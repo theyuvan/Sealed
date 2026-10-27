@@ -32,8 +32,26 @@ Deadline: **Nov 1, 21:30 IST**. How to run everything: [backend/RUNNING.md](back
 - [x] E2E tests: happy path, plus all 6 rogue attacks (injection, urgent fee, probing, trajectory inference, cart swap, proof replay), all of which fail
 - [x] Scripts: `dev`, `deploy` (asks before mainnet), `fund`, `e2e`, `install-tools`, `export-abis`, `auditor-decrypt`
 
+### HSK testnet (chain 133), deployed and run end to end
+- [x] Contracts deployed (addresses in `contracts/deployments/133.json`):
+  - MandateRegistry `0xccD0A380F5261CF5a2742faC1B29587e990039dd`
+  - SessionEscrow `0xcDb67c0dFfAd967Fe6F5983536D88AdE7b1cbbbc`
+  - SpendVerifier `0xCfC5D18E76586f042AADe43395c7bD337e2fC542`
+  - Dev stablecoin `0xDFB2c880143a0e858167a5df177E29dfc94E6AB4` (no `PINNED_TOKEN` yet)
+- [x] 8 service wallets generated into `backend/.env`, funded with testnet gas; buyer holds 1,000 dev USD
+- [x] Full purchase on testnet with the scripted buyer: 3 of 5 calls paid, rest refunded, receipt with explorer links
+- [x] Full purchase on testnet with the **Gemini** buyer agent (`gemini-3.1-flash-lite`); the budget never appeared in its context
+- [x] Fixes found on testnet: stale RPC nonces, RPC rate limits (batched + retrying transport), lagging load-balanced RPC nodes, empty `.env` values, async agent runs
+- [ ] Payments still go through the HSP local stand-in (real HSP needs HashKey credentials)
+
+### LLM
+- [x] Buyer agent supports Gemini (default, `LLM_PROVIDER=gemini`) and Claude
+- [ ] Gemini free tier allows 20 requests/day per model (one purchase ≈ 13–15 requests): enable billing or rotate models for the demo
+- [ ] Rotate the Gemini API key (it was shared in chat); keep it only in `backend/.env`
+
 ### Git
 - [x] 15 commits pushed to `github.com/theyuvan/Sealed` (`main`)
+- [ ] Commit today's changes (Gemini agent, testnet deployment, RPC fixes, docs)
 
 ## Left
 
@@ -50,14 +68,16 @@ Deadline: **Nov 1, 21:30 IST**. How to run everything: [backend/RUNNING.md](back
 
 ### Deploy and run for real
 - [ ] Fill `backend/.env` from `backend/.env.example` (real keys, distinct vault tokens, auditor key)
-- [ ] Testnet: `npm run deploy -- --network testnet`, fund gas, then run the flow against real HSP
-- [ ] Check the HSK RPC log-range limit (`LOGS_CHUNK`) and whether `--legacy` gas is needed
+- [x] Testnet deploy and gas funding (see above)
+- [ ] Testnet run against real HSP (needs HSP credentials)
+- [x] HSK testnet RPC: EIP-1559 works (no `--legacy` needed); it rate-limits bursts (Cloudflare 1015) and is load-balanced, both now handled
+- [ ] Check the RPC log-range limit on mainnet (`LOGS_CHUNK`)
 - [ ] Host the coordinator's `/hsp/webhook` over HTTPS and register the URL with HashKey
 - [ ] Mainnet deploy, then verify the contracts on Blockscout (needs approval: spends real HSK)
 - [ ] One real mainnet settlement: proof → HSP funding → calls → close → receipt (spends real stablecoin)
 
 ### Agent and demo
-- [ ] Run the live-LLM tests with an Anthropic key (2 tests are skipped without one)
+- [ ] Run the 2 live-LLM tests with Gemini when the daily quota allows (`GEMINI_API_KEY=... npm run test:services`)
 - [ ] Set `DATA_ASSETS` to real tokenized-asset contracts so the sellers' data products describe real assets
 - [ ] Frontend (not part of this backend work)
 - [ ] Demo recording (README §13) and a budget-inference chart from `services/adversary`

@@ -18,6 +18,6 @@ circuits/build/spend_js/*.js
 # foundry
 contracts/out/
 contracts/cache/
-contracts/broadcast/*/31337/
+contracts/broadcast/
 contracts/deployments/31337.json
 contracts/deployments/test-*.json
