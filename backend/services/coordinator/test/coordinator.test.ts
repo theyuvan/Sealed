@@ -67,7 +67,7 @@ beforeAll(async () => {
     networkName: "local",
     coin: "dUSDC",
     webhookEventIdField: "request_id",
-    successStatuses: ["payment-successful"],
+    successStatuses: ["payment-included", "payment-safe", "payment-finalized"],
     failedStatuses: ["payment-failed"],
     localStandIn: true,
   };
@@ -134,8 +134,16 @@ describe("coordinator", () => {
   });
 
   it("does not mark funded on an HSP 'success' without the on-chain transfer", async () => {
-    const r = (await coordinator.confirm(p.sessionId, { status: "payment-successful", cart_mandate_id: coordinator.order(p.sessionId)!.cart_mandate_id, payment_request_id: "x" })) as { funded: boolean; reason: string };
+    const r = (await coordinator.confirm(p.sessionId, { status: "payment-finalized", cart_mandate_id: coordinator.order(p.sessionId)!.cart_mandate_id, payment_request_id: "x" })) as { funded: boolean; reason: string };
     expect(r.funded).toBe(false);
+    expect(await sessionStatus(tc, p.sessionId)).toBe(1);
+  });
+
+  it("does not mark funded when HSP bills more than the session cap (fees on top)", async () => {
+    const rec = { status: "payment-finalized", cart_mandate_id: coordinator.order(p.sessionId)!.cart_mandate_id, payment_request_id: "x", pay_amount: "999.30" };
+    const r = (await coordinator.confirm(p.sessionId, rec)) as { funded: boolean; reason: string };
+    expect(r.funded).toBe(false);
+    expect(r.reason).toMatch(/pay_amount/);
     expect(await sessionStatus(tc, p.sessionId)).toBe(1);
   });
 
@@ -147,7 +155,7 @@ describe("coordinator", () => {
   });
 
   it("webhooks: bad signature and stale timestamps are rejected; duplicates are ignored", async () => {
-    const body = JSON.stringify({ request_id: "evt-1", status: "payment-successful", cart_mandate_id: "nope", payment_request_id: "nope" });
+    const body = JSON.stringify({ request_id: "evt-1", status: "payment-finalized", cart_mandate_id: "nope", payment_request_id: "nope" });
     const post = (sig: string) => fetch(`${coordUrl}/hsp/webhook`, { method: "POST", headers: { "content-type": "application/json", "x-signature": sig }, body });
     expect((await post(signWebhook("wrong-secret", body))).status).toBe(401);
     expect((await post(signWebhook(hsp.webhookSecret, body, Math.floor(Date.now() / 1000) - 301))).status).toBe(401);

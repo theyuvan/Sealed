@@ -1,4 +1,5 @@
 import type { KeyObject } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 import {
   canonicalJson,
   HSP_DEFAULT_HEADERS,
@@ -124,7 +125,7 @@ export function hspConfigFromEnv(rawEnv: NodeJS.ProcessEnv, chainId: number): Hs
     payerBaseUrl: localStandIn ? baseUrl : (env.HSP_PAYER_BASE_URL ?? baseUrl),
     appKey: need(env, "HSP_APP_KEY"),
     appSecret: need(env, "HSP_APP_SECRET"),
-    merchantPrivateKey: env.HSP_MERCHANT_PRIVATE_KEY ?? "",
+    merchantPrivateKey: keyOrFile(env.HSP_MERCHANT_PRIVATE_KEY),
     merchantName: env.HSP_MERCHANT_NAME ?? "Sealed",
     webhookSecret: env.HSP_WEBHOOK_SECRET ?? env.HSP_APP_SECRET ?? "",
     paths: {
@@ -143,12 +144,20 @@ export function hspConfigFromEnv(rawEnv: NodeJS.ProcessEnv, chainId: number): Hs
     jwtAudience: env.HSP_JWT_AUDIENCE ?? "HashkeyMerchant",
     x402Method: env.HSP_X402_METHOD ?? "https://www.x402.org/",
     networkName: env.HSP_NETWORK_NAME ?? (chainId === 177 ? "hashkey" : chainId === 133 ? "hashkey-testnet" : "local"),
-    coin: env.HSP_COIN ?? "USDC.e",
+    coin: env.HSP_COIN ?? "USDC",
     webhookEventIdField: env.HSP_WEBHOOK_EVENT_ID_FIELD ?? "request_id",
-    successStatuses: list(env.HSP_SUCCESS_STATUSES, ["payment-successful", "payment-safe", "payment-finalized"]),
+    // HSP webhooks fire on payment-included, -safe, -finalized and -failed; the coordinator re-checks the chain itself
+    successStatuses: list(env.HSP_SUCCESS_STATUSES, ["payment-included", "payment-safe", "payment-finalized"]),
     failedStatuses: list(env.HSP_FAILED_STATUSES, ["payment-failed"]),
     localStandIn,
   };
+}
+
+/** HSP_MERCHANT_PRIVATE_KEY may be PEM text, 0x-hex, or a path to a PEM file. */
+function keyOrFile(v: string | undefined): string {
+  if (!v) return "";
+  if (v.includes("BEGIN") || /^(0x)?[0-9a-fA-F]{64}$/.test(v.trim())) return v;
+  return existsSync(v) ? readFileSync(v, "utf8") : v;
 }
 
 function need(env: NodeJS.ProcessEnv, k: string): string {

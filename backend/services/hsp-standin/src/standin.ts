@@ -10,6 +10,7 @@ import {
   chainFor,
   checkSignedRequest,
   decimalToUnits,
+  unitsToDecimal,
   decodeX402,
   eip3009Abi,
   hspHash,
@@ -123,7 +124,10 @@ export function buildStandIn(cfg: StandInConfig): FastifyInstance & { pub: Publi
       flow_id: f.flow_id,
       status: f.status,
       status_reason: f.status_reason,
-      amount: f.amount,
+      // token-denominated decimals, as the real gateway reports them
+      amount: unitsToDecimal(BigInt(f.amount), cfg.decimals),
+      order_amount: unitsToDecimal(BigInt(f.amount), cfg.decimals),
+      pay_amount: unitsToDecimal(BigInt(f.amount), cfg.decimals),
       token_address: m.contract_address,
       chain_id: m.chain_id,
       payer_address: f.payer ?? undefined,
@@ -180,6 +184,8 @@ export function buildStandIn(cfg: StandInConfig): FastifyInstance & { pub: Publi
       if (existing.cart_json !== JSON.stringify(cart)) return fail(40901, "cart_mandate id reused for a different cart");
       return ok({ flow_id: existing.flow_id, payment_url: record(existing).payment_url, cart_mandate_id: existing.cart_mandate_id, payment_request_id: existing.payment_request_id });
     }
+    // like the real gateway: a payment_request_id belongs to one order only
+    if (flow("payment_request_id", cart.contents.payment_request.details.id)) return fail(10004, "duplicate payment_request_id");
     const flowId = randomBytes(16).toString("hex");
     const now = Date.now();
     db.prepare(
@@ -266,7 +272,8 @@ export function buildStandIn(cfg: StandInConfig): FastifyInstance & { pub: Publi
         await setStatus(f.flow_id, "payment-failed", { reason: "transfer reverted", tx: hash });
         return fail(50001, "transfer reverted");
       }
-      await setStatus(f.flow_id, "payment-successful", { tx: hash });
+      await setStatus(f.flow_id, "payment-safe", { tx: hash });
+      await setStatus(f.flow_id, "payment-finalized", { tx: hash });
       return ok({ ...record(flow("flow_id", f.flow_id)!) });
     } catch (e) {
       await setStatus(f.flow_id, "payment-failed", { reason: (e as Error).message.slice(0, 200) });

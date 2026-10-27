@@ -20,6 +20,7 @@ import {
   HspClient,
   chainFor,
   eip3009Abi,
+  decimalToUnits,
   explorerTx,
   hspStatusClass,
   merchantAuthorization,
@@ -139,7 +140,7 @@ export class Coordinator {
 
     const attempt = existing ? Number(existing.cart_mandate_id.split("-R")[1] ?? 0) + 1 : 0;
     const cartMandateId = sessionCartMandateId(this.cfg.chainId, sessionId, attempt);
-    const paymentRequestId = sessionPaymentRequestId(sessionId);
+    const paymentRequestId = sessionPaymentRequestId(sessionId, attempt);
     const value = unitsToDecimal(s.cap, this.cfg.decimals);
     const contents: HspCartContents = {
       id: cartMandateId,
@@ -215,8 +216,10 @@ export class Coordinator {
     } catch {
       return { status: 400, body: { error: "invalid json" } };
     }
-    const eventId = String(rec[this.cfg.hsp.webhookEventIdField] ?? "");
-    if (!eventId) return { status: 400, body: { error: "missing event id" } };
+    const rawEventId = String(rec[this.cfg.hsp.webhookEventIdField] ?? "");
+    if (!rawEventId) return { status: 400, body: { error: "missing event id" } };
+    // included, safe and finalized events share one request_id, so dedupe per status
+    const eventId = `${rawEventId}:${rec.status ?? ""}`;
     const fresh = this.db.prepare("INSERT OR IGNORE INTO webhook_events (event_id, received_at) VALUES (?, ?)").run(eventId, Date.now());
     if (fresh.changes === 0) return { status: 200, body: { ok: true, duplicate: true } };
 
@@ -263,6 +266,18 @@ export class Coordinator {
     const s = await this.session(sessionId);
     if (s.status !== 1) return { funded: s.status === 2, reason: `session status ${s.status}` };
     const cap = s.cap;
+
+    // 1b. what HSP says the payer paid must be exactly the cap: no service, network or gas fee on top
+    const billed = rec.pay_amount ?? rec.amount;
+    if (billed !== undefined) {
+      let billedUnits: bigint | null = null;
+      try {
+        billedUnits = decimalToUnits(String(billed), this.cfg.decimals);
+      } catch {
+        // falls through to the mismatch below
+      }
+      if (billedUnits !== cap) return { funded: false, reason: `HSP pay_amount ${billed} differs from the session cap (fees added?)` };
+    }
 
     // 2. the exact EIP-3009 transfer is on chain: buyer -> escrow, value = cap, nonce = sessionId
     const used = await this.pub.readContract({ address: s.token, abi: eip3009Abi, functionName: "authorizationState", args: [s.buyer, sessionId] });

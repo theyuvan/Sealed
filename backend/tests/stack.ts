@@ -88,7 +88,7 @@ export async function startStack(o: StackOptions = {}): Promise<Stack> {
     networkName: "local",
     coin: "dUSDC",
     webhookEventIdField: "request_id",
-    successStatuses: ["payment-successful"],
+    successStatuses: ["payment-included", "payment-safe", "payment-finalized"],
     failedStatuses: ["payment-failed"],
     localStandIn: true,
   };

@@ -13,9 +13,17 @@ import {
 } from "./hsp.ts";
 import { userAuthorization } from "./hsp-crypto.ts";
 
-/** HSP payment_request id the coordinator uses for a session; lets the buyer bind a cart to its session. */
-export function sessionPaymentRequestId(sessionId: Hex): string {
-  return `SEALED-PR-${sessionId.slice(2).toLowerCase()}`;
+/**
+ * HSP payment_request id the coordinator uses for a session; lets the buyer bind a cart to its session.
+ * HSP rejects a reused payment_request_id (10004), so a retry after a failed order gets an `-R<n>` suffix.
+ */
+export function sessionPaymentRequestId(sessionId: Hex, attempt = 0): string {
+  return `SEALED-PR-${sessionId.slice(2).toLowerCase()}${attempt > 0 ? `-R${attempt}` : ""}`;
+}
+
+function isSessionPaymentRequestId(id: string, sessionId: Hex): boolean {
+  const base = sessionPaymentRequestId(sessionId);
+  return id === base || new RegExp(`^${base}-R[1-9][0-9]*$`).test(id);
 }
 
 export function sessionCartMandateId(chainId: number, sessionId: Hex, attempt = 0): string {
@@ -50,7 +58,7 @@ export function checkCartForSession(cart: HspCartMandate, e: CartExpectation): s
   const d = c.payment_request.details;
   if (d.total.amount.value !== want) return `total ${d.total.amount.value} != session cap ${want}`;
   if (d.display_items.length !== 1 || d.display_items[0]!.amount.value !== want) return "cart has extra or mismatched line items";
-  if (d.id !== sessionPaymentRequestId(e.sessionId)) return "cart is not bound to this session";
+  if (!isSessionPaymentRequestId(d.id, e.sessionId)) return "cart is not bound to this session";
   if (new Date(c.cart_expiry).getTime() < Date.now()) return "cart expired";
   return null;
 }

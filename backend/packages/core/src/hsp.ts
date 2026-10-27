@@ -151,7 +151,11 @@ export interface HspPaymentRecord {
   flow_id?: string;
   status: string;
   status_reason?: string | null;
+  request_id?: string;
+  /** token-denominated decimal strings; pay_amount = order_amount + any fees the payer bears */
   amount?: string;
+  order_amount?: string;
+  pay_amount?: string;
   token_address?: string;
   chain_id?: number;
   payer_address?: string;
