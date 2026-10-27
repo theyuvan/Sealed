@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { type Address, type Chain, defineChain } from "viem";
+import { type Address, type Chain, defineChain, http } from "viem";
 
 export const hskMainnet = defineChain({
   id: 177,
@@ -32,6 +32,15 @@ export function chainFor(chainId: number, rpcUrl?: string): Chain {
   const base = chainId === 177 ? hskMainnet : chainId === 133 ? hskTestnet : chainId === 31337 ? localAnvil : undefined;
   if (!base) throw new Error(`unsupported chain id ${chainId}`);
   return rpcUrl ? { ...base, rpcUrls: { default: { http: [rpcUrl] } } } : base;
+}
+
+/**
+ * JSON-RPC transport for every service. Public HSK RPCs sit behind rate limiting (Cloudflare 1015 /
+ * HTTP 429), so calls are batched into fewer HTTP requests and rate-limited calls are retried with
+ * exponential backoff (1s, 2s, 4s, ...).
+ */
+export function rpcTransport(url?: string) {
+  return http(url, { batch: { wait: 16 }, retryCount: 6, retryDelay: 1_000, timeout: 30_000 });
 }
 
 export function explorerTx(chainId: number, tx: string): string | null {
@@ -70,7 +79,8 @@ export function loadDeployment(chainId: number, env: NodeJS.ProcessEnv = process
     verifier: pick("VERIFIER_ADDRESS", "verifier"),
     token: pick("PINNED_TOKEN", "token"),
     coordinator: pick("COORDINATOR_ADDRESS", "coordinator"),
-    deployBlock: Number(env.DEPLOY_BLOCK ?? fromFile.deployBlock ?? 0),
+    // empty env values (e.g. `DEPLOY_BLOCK=` left blank in .env) count as unset
+    deployBlock: Number(env.DEPLOY_BLOCK || fromFile.deployBlock || 0),
   };
   for (const k of ["registry", "escrow", "token"] as const) {
     if (!d[k]) throw new Error(`deployment for chain ${chainId} is missing ${k} (set env or ${file})`);

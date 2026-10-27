@@ -1,6 +1,6 @@
 import { randomBytes, type KeyObject } from "node:crypto";
 import Fastify, { type FastifyInstance } from "fastify";
-import { type Account, type Address, type PublicClient, createPublicClient, createWalletClient, http, isAddressEqual, recoverTypedDataAddress } from "viem";
+import { type Account, type Address, type PublicClient, createPublicClient, createWalletClient, isAddressEqual, recoverTypedDataAddress } from "viem";
 import {
   EIP3009_TYPES,
   type HspCartMandate,
@@ -18,8 +18,7 @@ import {
   readTokenDomain,
   signWebhook,
   verifyEs256k,
-  verifyHs256,
-} from "@sealed/core";
+  verifyHs256, rpcTransport } from "@sealed/core";
 
 /**
  * "HSP local stand-in" — DEVELOPMENT ONLY. Not operated by HashKey.
@@ -81,8 +80,8 @@ export function buildStandIn(cfg: StandInConfig): FastifyInstance & { pub: Publi
       created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);`,
   );
   const chain = chainFor(cfg.chainId, cfg.rpcUrl);
-  const pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) }) as PublicClient;
-  const wallet = createWalletClient({ chain, transport: http(cfg.rpcUrl), account: cfg.relayer });
+  const pub = createPublicClient({ chain, transport: rpcTransport(cfg.rpcUrl) }) as PublicClient;
+  const wallet = createWalletClient({ chain, transport: rpcTransport(cfg.rpcUrl), account: cfg.relayer });
   const app = Fastify({ logger: false }) as unknown as FastifyInstance & { pub: PublicClient };
   app.decorate("pub", pub);
 
