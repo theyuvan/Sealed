@@ -14,6 +14,9 @@ const shared = {
 
 export default defineConfig({
   test: {
+    // test files share anvil/forge state (deploy broadcast files): never run them in parallel
+    fileParallelism: false,
+    pool: "forks",
     projects: [
       {
         test: { name: "backend", root: backend, include: ["packages/**/*.test.ts", "services/**/*.test.ts", "tests/**/*.test.ts"], ...shared },
