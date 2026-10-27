@@ -1,17 +1,18 @@
 import { accountFromEnv, envInt, HSP_DEFAULT_PATHS, loadDeployment, loadEnv, requireEnv } from "@sealed/core";
 import { VaultAgentClient } from "./vault-client.ts";
+import { llmFromEnv } from "./agent.ts";
 import { buildBuyerServer } from "./server.ts";
 
 const env = loadEnv();
 const chainId = envInt("CHAIN_ID", 31337);
 const wallet = accountFromEnv("BUYER_WALLET_PRIVATE_KEY");
 const agentToken = requireEnv("VAULT_AGENT_TOKEN");
-const llmApiKey = env.LLM_API_KEY || undefined;
+const llm = llmFromEnv(env);
 
 // The agent process keeps only what it needs. Everything else (vault admin token, other services'
 // keys, merchant secrets) is removed from its environment before any tool runs.
 for (const k of Object.keys(process.env)) {
-  if (/PRIVATE_KEY|SECRET|ADMIN_TOKEN|APP_KEY|AGENT_TOKEN|LLM_API_KEY/.test(k)) delete process.env[k];
+  if (/PRIVATE_KEY|SECRET|ADMIN_TOKEN|APP_KEY|AGENT_TOKEN|API_KEY/.test(k)) delete process.env[k];
 }
 
 const standin = env.HSP_LOCAL_STANDIN === "1";
@@ -39,6 +40,6 @@ const app = buildBuyerServer(
     sellerUrls: (env.SELLER_URLS ?? "http://127.0.0.1:7101,http://127.0.0.1:7102,http://127.0.0.1:7103").split(",").map((s) => s.trim()),
     decimals: envInt("TOKEN_DECIMALS", 6),
   },
-  { llmApiKey, logger: true },
+  { llm, logger: true },
 );
 await app.listen({ host: "127.0.0.1", port: envInt("BUYER_AGENT_PORT", 7002) });

@@ -4,7 +4,7 @@ import { keccak256, stringToHex } from "viem";
 import { canonicalJson } from "@sealed/core";
 import { shutdownProver } from "@sealed/prover";
 import { AGENT_TOKEN, startStack, type Stack } from "../../../tests/stack.ts";
-import { TOOL_DEFS, checkDelivery, runLlmAgent, runScripted } from "../src/index.ts";
+import { TOOL_DEFS, checkDelivery, llmFromEnv, runAgent, runLlmAgent, runScripted } from "../src/index.ts";
 
 describe("checkDelivery (deterministic)", () => {
   const sessionId = keccak256(stringToHex("s"));
@@ -75,11 +75,14 @@ describe("buyer agent against the full stack", () => {
     expect((seen[1] as unknown[]).slice(0, 1)).toEqual(seen[0]);
   });
 
-  it.skipIf(!process.env.ANTHROPIC_API_KEY && !process.env.LLM_API_KEY)("live LLM buys a service end to end without seeing the budget", async () => {
+  it.skipIf(!llmFromEnv(process.env))("live LLM buys a service end to end without seeing the budget", async () => {
     const tools = stack.buyerTools();
-    const run = await runLlmAgent(tools, `Buy 2 calls of the "recent-transfers" service from the seller at ${stack.urls.honest2}, then close the session.`, { apiKey: process.env.LLM_API_KEY });
-    const everything = JSON.stringify(run.messages) + JSON.stringify(tools.transcript);
+    const run = await runAgent(tools, `Buy 2 calls of the "recent-transfers" service from the seller at ${stack.urls.honest2}, then close the session.`, llmFromEnv(process.env)!, { log: (m) => console.log(m) });
+    console.log("live agent tool calls:", tools.transcript.map((t) => `${t.tool}${"decision" in (t.output as object) ? `:${(t.output as { decision: string }).decision}` : ""}${"error" in (t.output as object) ? ":ERROR" : ""}`).join(" -> "));
+    console.log("live agent final answer:", run.finalText.slice(0, 600));
+    expect(tools.transcript.some((t) => t.tool === "close_session" && "receipt" in (t.output as object))).toBe(true);
+    const everything = JSON.stringify(run.conversation) + JSON.stringify(tools.transcript);
     expect(everything.includes(stack.mandate.cap.toString())).toBe(false);
     expect(everything.includes(stack.mandate.max.toString())).toBe(false);
-  });
+  }, 900_000);
 });
