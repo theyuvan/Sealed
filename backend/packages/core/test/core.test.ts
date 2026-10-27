@@ -35,6 +35,7 @@ import {
   respond,
   seededRng,
   computeSessionId,
+  loadDeployment,
   type Note,
 } from "../src/index.ts";
 
@@ -149,6 +150,14 @@ describe("hsp helpers", () => {
     expect(verifyEs256k(jwt, k)).toMatchObject({ a: 1 });
     expect(verifyEs256k(jwt, createPublicKey(k))).toMatchObject({ a: 1 });
     expect(verifyEs256k(jwt.slice(0, -2) + "AA", k)).toBeNull();
+  });
+});
+
+describe("deployment loading", () => {
+  it("treats empty env values as unset (falls back to the deployment file)", () => {
+    const d = loadDeployment(133, { DEPLOY_BLOCK: "", REGISTRY_ADDRESS: "", ESCROW_ADDRESS: "", PINNED_TOKEN: "" } as NodeJS.ProcessEnv);
+    expect(d.deployBlock).toBeGreaterThan(0);
+    expect(d.registry).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 });
 

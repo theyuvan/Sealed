@@ -112,7 +112,9 @@ export class HspClient {
  * Reads HSP config from env. `HSP_LOCAL_STANDIN=1` switches to the "HSP local stand-in"
  * (development only); it is refused on mainnet.
  */
-export function hspConfigFromEnv(env: NodeJS.ProcessEnv, chainId: number): HspConfig {
+export function hspConfigFromEnv(rawEnv: NodeJS.ProcessEnv, chainId: number): HspConfig {
+  // empty values (e.g. `HSP_PAYER_BASE_URL=` left blank in .env) count as unset
+  const env = Object.fromEntries(Object.entries(rawEnv).filter(([, v]) => v !== "")) as NodeJS.ProcessEnv;
   const localStandIn = env.HSP_LOCAL_STANDIN === "1" || env.HSP_LOCAL_STANDIN === "true";
   if (localStandIn && chainId === 177) throw new Error("HSP local stand-in must not be used on mainnet (CHAIN_ID=177)");
   const baseUrl = localStandIn ? (env.HSP_STANDIN_URL ?? "http://127.0.0.1:7301") : need(env, "HSP_BASE_URL");
