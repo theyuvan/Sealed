@@ -76,7 +76,7 @@ const rpc = (method, params) => fetch(RPC, { method: "POST", headers: { "content
 for (const k of keyNames.filter((k) => !k.includes("MERCHANT"))) await rpc("anvil_setBalance", [privateKeyToAccount(env[k]).address, "0x56BC75E2D63100000"]);
 
 // 4. deploy (dev token, verifier, registry, escrow)
-const childEnv = { ...process.env, ...env };
+const childEnv = { ...process.env, ...env, SEALED_ENV: "local" };
 delete childEnv.PINNED_TOKEN;
 run(tool("forge"), ["script", "script/Deploy.s.sol", "--rpc-url", RPC, "--broadcast", "--silent"], { cwd: join(REPO, "contracts"), env: childEnv });
 const deployment = JSON.parse(readFileSync(join(REPO, "contracts", "deployments", "31337.json"), "utf8"));
@@ -110,7 +110,7 @@ Sealed dev stack is up (local anvil, HSP local stand-in):
   sellers      http://127.0.0.1:7101 (honest-1)  :7102 (honest-2)  :7103 (rogue)
   coordinator  http://127.0.0.1:7201
   HSP stand-in http://127.0.0.1:7301
-Run the full flow in another terminal:  npm run e2e
+Run the full flow in another terminal:  npm run e2e:local
 Ctrl+C to stop.`);
 
 const stop = () => {
