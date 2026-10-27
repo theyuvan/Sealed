@@ -14,10 +14,10 @@ import {
 } from "viem";
 import {
   type Deployment,
-  type HspCartContents,
   type HspConfig,
   type HspPaymentRecord,
   HspClient,
+  buildSessionCartContents,
   chainFor,
   eip3009Abi,
   decimalToUnits,
@@ -31,6 +31,7 @@ import {
   sessionEscrowAbi,
   sessionPaymentRequestId,
   unitsToDecimal,
+  validateCartContents,
   verifyWebhook, rpcTransport } from "@sealed/core";
 
 export interface CoordinatorConfig {
@@ -142,32 +143,20 @@ export class Coordinator {
     const cartMandateId = sessionCartMandateId(this.cfg.chainId, sessionId, attempt);
     const paymentRequestId = sessionPaymentRequestId(sessionId, attempt);
     const value = unitsToDecimal(s.cap, this.cfg.decimals);
-    const contents: HspCartContents = {
-      id: cartMandateId,
-      user_cart_confirmation_required: true,
-      payment_request: {
-        method_data: [
-          {
-            supported_methods: this.cfg.hsp.x402Method,
-            data: {
-              x402Version: 2,
-              network: this.cfg.hsp.networkName,
-              chain_id: this.cfg.chainId,
-              contract_address: s.token,
-              pay_to: this.cfg.deployment.escrow,
-              coin: this.cfg.hsp.coin,
-            },
-          },
-        ],
-        details: {
-          id: paymentRequestId,
-          display_items: [{ label: `Sealed session ${sessionId.slice(0, 10)} (${merchantLabel})`, amount: { currency: "USD", value } }],
-          total: { label: "Total", amount: { currency: "USD", value } },
-        },
-      },
-      cart_expiry: new Date(Date.now() + (this.cfg.cartTtlSeconds ?? 1800) * 1000).toISOString(),
-      merchant_name: this.cfg.hsp.merchantName,
-    };
+    const contents = buildSessionCartContents({
+      cfg: this.cfg.hsp,
+      chainId: this.cfg.chainId,
+      token: s.token,
+      escrow: this.cfg.deployment.escrow,
+      amount: value,
+      cartMandateId,
+      paymentRequestId,
+      label: `Sealed session ${sessionId.slice(0, 10)} (${merchantLabel})`,
+      expiresAt: new Date(Date.now() + (this.cfg.cartTtlSeconds ?? 1800) * 1000),
+    });
+    // HSP answers a malformed cart with 10001 and creates nothing; catch it here with a readable reason
+    const problems = validateCartContents(contents, { checkTokens: !this.cfg.hsp.localStandIn });
+    if (problems.length) throw new CoordinatorError(`cart rejected before submission: ${problems.join("; ")}`, 500);
     const cart = {
       contents,
       merchant_authorization: merchantAuthorization(contents, { merchantName: this.cfg.hsp.merchantName, audience: this.cfg.hsp.jwtAudience, key: this.hsp.merchantKey }),

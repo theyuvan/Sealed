@@ -1,10 +1,11 @@
 // CLI: simulated comparison, plus (optionally) the live Vault's recorded traces.
-//   npx tsx services/adversary/src/main.ts [--runs 1000] [--seed 1]
+//   npx tsx services/adversary/src/main.ts [--runs 1000] [--seed 1]   (writes data/adversary-report.json and data/adversary-chart.svg)
 //   VAULT_URL=... VAULT_ADMIN_TOKEN=... TRUE_CEILING=... npx tsx services/adversary/src/main.ts --live
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { BACKEND_ROOT, loadEnv } from "@sealed/core";
-import { evaluate, evaluateRecorded } from "./adversary.ts";
+import { type EvalResult, evaluate, evaluateRecorded } from "./adversary.ts";
+import { renderChartSvg } from "./chart.ts";
 
 const env = loadEnv();
 const arg = (k: string) => {
@@ -21,8 +22,10 @@ if (process.argv.includes("--live")) {
 }
 
 console.log(JSON.stringify(result, null, 2));
-const out = join(BACKEND_ROOT, "data", "adversary-report.json");
+const dir = join(BACKEND_ROOT, "data");
 try {
-  writeFileSync(out, JSON.stringify(result, null, 2));
-  console.log(`wrote ${out}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "adversary-report.json"), JSON.stringify(result, null, 2));
+  writeFileSync(join(dir, "adversary-chart.svg"), renderChartSvg(result.simulated as EvalResult));
+  console.log(`wrote ${join(dir, "adversary-report.json")} and ${join(dir, "adversary-chart.svg")}`);
 } catch {}

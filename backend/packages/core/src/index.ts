@@ -18,3 +18,4 @@ export * from "./registry-sync.ts";
 export * from "./escrow.ts";
 export * from "./hsp-payer.ts";
 export * from "./catalog.ts";
+export * from "./hsp-registry.ts";

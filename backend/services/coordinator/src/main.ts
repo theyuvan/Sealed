@@ -1,15 +1,21 @@
 import { join } from "node:path";
-import { BACKEND_ROOT, accountFromEnv, envInt, hspConfigFromEnv, loadDeployment, loadEnv, requireEnv } from "@sealed/core";
+import { BACKEND_ROOT, accountFromEnv, envInt, hspConfigFromEnv, hspTokenError, loadDeployment, loadEnv, requireEnv } from "@sealed/core";
 import { Coordinator } from "./coordinator.ts";
 import { buildCoordinatorServer } from "./server.ts";
 
 const env = loadEnv();
 const chainId = envInt("CHAIN_ID", 31337);
 const hsp = hspConfigFromEnv(env, chainId);
+const deployment = loadDeployment(chainId);
+if (!hsp.localStandIn) {
+  // real HSP settles only its registered tokens, and Sealed's escrow needs EIP-3009: fail at startup, not on the first order
+  const tokenProblem = hspTokenError(chainId, deployment.token, hsp.coin);
+  if (tokenProblem) throw new Error(`refusing to start against real HSP: ${tokenProblem}`);
+}
 const coordinator = new Coordinator({
   chainId,
   rpcUrl: requireEnv("HSK_RPC_URL"),
-  deployment: loadDeployment(chainId),
+  deployment,
   account: accountFromEnv("COORDINATOR_PRIVATE_KEY"),
   hsp,
   decimals: envInt("TOKEN_DECIMALS", 6),

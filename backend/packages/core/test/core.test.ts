@@ -35,6 +35,12 @@ import {
   respond,
   seededRng,
   computeSessionId,
+  HSP_TOKENS,
+  buildSessionCartContents,
+  findHspToken,
+  hspTokenError,
+  recommendedHspToken,
+  validateCartContents,
   loadDeployment,
   type Note,
 } from "../src/index.ts";
@@ -194,5 +200,65 @@ describe("offer policy", () => {
     const t = s.target;
     expect(respond({ ...s }, t + 1n, seededRng(1)).decision).not.toBe("accept");
     expect(respond({ ...s }, t, seededRng(1)).decision).toBe("accept");
+  });
+});
+
+describe("HSP registry and cart validation", () => {
+  const hsk = { x402Method: "https://www.x402.org/", networkName: "hashkey-testnet", coin: "USDC", merchantName: "Sealed" };
+  const escrow = "0x00000000000000000000000000000000000000cc";
+  const testnetUsdc = "0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6";
+  const cart = (o: Partial<Parameters<typeof buildSessionCartContents>[0]> = {}) =>
+    buildSessionCartContents({ cfg: hsk, chainId: 133, token: testnetUsdc, escrow, amount: "5.00", cartMandateId: "C-1", paymentRequestId: "P-1", label: "x", expiresAt: new Date(Date.now() + 60_000), ...o });
+
+  it("knows HashKey's tokens and recommends the EIP-3009 one per chain", () => {
+    expect(findHspToken(133, testnetUsdc.toLowerCase())?.coin).toBe("USDC");
+    expect(recommendedHspToken(133)?.address).toBe(testnetUsdc.toLowerCase());
+    expect(recommendedHspToken(177)?.address).toBe("0x054ed45810dbbab8b27668922d110669c9d88d0a");
+    expect(HSP_TOKENS.filter((x) => x.protocol === "eip3009").every((x) => x.coin === "USDC")).toBe(true);
+  });
+
+  it("refuses unregistered tokens, Permit2-only tokens and a wrong coin symbol", () => {
+    expect(hspTokenError(133, testnetUsdc, "USDC")).toBeNull();
+    expect(hspTokenError(133, "0x00000000000000000000000000000000000000aa")).toMatch(/not an HSP-supported token/);
+    expect(hspTokenError(133, "0x372325443233fEbaC1F6998aC750276468c83CC6")).toMatch(/needs EIP-3009/);
+    expect(hspTokenError(133, testnetUsdc, "USDC.e")).toMatch(/HSP_COIN/);
+    expect(hspTokenError(133, testnetUsdc.replace("8FE3", "8fe3"))).toBeNull();
+  });
+
+  it("accepts the cart the coordinator builds", () => {
+    expect(validateCartContents(cart(), { checkTokens: true })).toEqual([]);
+  });
+
+  it("rejects what the gateway rejects with 10001", () => {
+    const bad = (mutate: (c: ReturnType<typeof cart>) => void, opts = {}) => {
+      const c = cart();
+      mutate(c);
+      return validateCartContents(c, opts).join(" | ");
+    };
+    expect(bad((c) => (c.payment_request.details.total.amount.currency = "EUR"))).toMatch(/currency must be USD/);
+    expect(bad((c) => (c.payment_request.details.total.amount.value = "0.00"))).toMatch(/greater than 0/);
+    expect(bad((c) => (c.payment_request.details.total.amount.value = "6.00"))).toMatch(/sum\(display_items\)/);
+    expect(bad((c) => c.payment_request.details.display_items.push({ label: "fee", amount: { currency: "USD", value: "2.00" } }))).toMatch(/sum\(display_items\)/);
+    expect(bad((c) => (c.payment_request.method_data[0]!.data.x402Version = 1 as never))).toMatch(/x402Version must be 2/);
+    expect(bad((c) => (c.payment_request.method_data[0]!.supported_methods = "https://example.com"))).toMatch(/x402/);
+    expect(bad((c) => (c.payment_request.method_data[0]!.data.pay_to = "0x1234" as never))).toMatch(/pay_to is not an address/);
+    expect(bad((c) => (c.cart_expiry = "tomorrow"))).toMatch(/RFC 3339/);
+    expect(bad((c) => (c.cart_expiry = "2020-01-01T00:00:00Z"))).toMatch(/in the past/);
+    expect(bad((c) => (c.payment_request.method_data = []))).toMatch(/at least one payment method/);
+  });
+
+  it("treats a trailing slash on the x402 method as the same method, and 10.0 as 10.00", () => {
+    expect(validateCartContents(cart({ amount: "10.0" }), { checkTokens: true })).toEqual([]);
+    const c = cart();
+    c.payment_request.method_data[0]!.supported_methods = "https://www.x402.org";
+    expect(validateCartContents(c)).toEqual([]);
+  });
+
+  it("with checkTokens, flags a dev token and a wrong network name; without it, allows both (local stand-in)", () => {
+    const dev = cart({ token: "0x00000000000000000000000000000000000000aa" });
+    expect(validateCartContents(dev, { checkTokens: true }).join()).toMatch(/not an HSP-supported token/);
+    expect(validateCartContents(dev)).toEqual([]);
+    const wrongNet = cart({ cfg: { ...hsk, networkName: "hashkey" } });
+    expect(validateCartContents(wrongNet, { checkTokens: true }).join()).toMatch(/calls chain 133 "hashkey-testnet"/);
   });
 });

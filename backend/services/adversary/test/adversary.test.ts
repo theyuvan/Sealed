@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_POLICY, seededRng, startPolicy } from "@sealed/core";
 import { baselineTrace, estimateCeilingBaselineAware, evaluate, evaluateRecorded, probeInterval, sealedTrace } from "../src/adversary.ts";
+import { renderChartSvg } from "../src/chart.ts";
 
 describe("adversary evaluator", () => {
   it("baseline trajectory reveals the budget exactly to an algorithm-aware adversary", () => {
@@ -52,5 +53,17 @@ describe("adversary evaluator", () => {
     );
     expect(r.negotiations).toBe(1);
     expect(r.mape).toBeGreaterThan(0);
+  });
+});
+
+describe("demo chart", () => {
+  it("renders the measured errors as a self-contained SVG", () => {
+    const r = evaluate({ runs: 200, seed: 3 });
+    const svg = renderChartSvg(r);
+    expect(svg.startsWith("<svg")).toBe(true);
+    expect(svg).toContain(`${(r.sealedMapeAware * 100).toFixed(1)}%`);
+    expect(svg).toContain(`${(r.baselineMapeAware * 100).toFixed(1)}%`);
+    expect(svg).not.toMatch(/NaN|undefined/);
+    expect(svg.endsWith("</svg>\n")).toBe(true);
   });
 });

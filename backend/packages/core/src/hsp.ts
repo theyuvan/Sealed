@@ -54,7 +54,7 @@ export interface HspConfig {
 export const HSP_DEFAULT_PATHS: HspConfig["paths"] = {
   createOrder: "/api/v1/merchant/orders",
   payments: "/api/v1/merchant/payments",
-  cartByFlow: "/api/v1/payment/cart-mandate/flow/{flowId}",
+  cartByFlow: "/api/v1/checkout/orders/{flowId}", // public checkout API (no auth), per the official Go SDK routes.go
   payMandate: "/api/v1/payment/pay-mandate",
 };
 
