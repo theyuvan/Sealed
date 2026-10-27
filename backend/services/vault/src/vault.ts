@@ -7,7 +7,6 @@ import {
   type WalletClient,
   createPublicClient,
   createWalletClient,
-  http,
   isAddressEqual,
   parseEventLogs,
 } from "viem";
@@ -34,6 +33,7 @@ import {
   jsonStringify,
   mandateRegistryAbi,
   newSecrets,
+  readSession,
   nextDeliveryChain,
   nullifierOf,
   openDb,
@@ -46,8 +46,7 @@ import {
   syncRegistryTree,
   toField,
   voucherDomain,
-  EMPTY_DELIVERY_CHAIN,
-} from "@sealed/core";
+  EMPTY_DELIVERY_CHAIN, rpcTransport } from "@sealed/core";
 import { buildSpendWitness, proveSpend, toSolidityProof, verifySpend } from "@sealed/prover";
 
 export interface VaultConfig {
@@ -69,6 +68,8 @@ export interface VaultConfig {
   policy?: PolicyParams;
   rng?: Rng;
   logsChunk?: bigint;
+  /** structured step log (never receives mandate values) */
+  log?: (msg: string, data?: Record<string, unknown>) => void;
 }
 
 export class VaultError extends Error {
@@ -219,8 +220,8 @@ export class Vault {
   constructor(readonly cfg: VaultConfig) {
     this.db = openDb(cfg.dbPath, SCHEMA);
     const chain = chainFor(cfg.chainId, cfg.rpcUrl);
-    this.pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) }) as PublicClient;
-    this.wallet = createWalletClient({ chain, transport: http(cfg.rpcUrl), account: cfg.account });
+    this.pub = createPublicClient({ chain, transport: rpcTransport(cfg.rpcUrl) }) as PublicClient;
+    this.wallet = createWalletClient({ chain, transport: rpcTransport(cfg.rpcUrl), account: cfg.account });
     this.rng = cfg.rng ?? cryptoRng;
     this.policy = cfg.policy ?? DEFAULT_POLICY;
   }
@@ -450,12 +451,16 @@ export class Vault {
 
       const m = this.db.prepare("SELECT * FROM mandates WHERE id = ?").get(n.mandate_id) as unknown as MandateRow;
       if (m.status !== "active") throw new VaultError("mandate no longer active");
+      const step = (s: string) => this.cfg.log?.(`proof: ${s}`, { negotiationId });
+      step("refresh note");
       await this.refreshNote(m);
       const row = this.db.prepare("SELECT * FROM mandates WHERE id = ?").get(m.id) as unknown as MandateRow;
       if (row.pending_json) throw new VaultError("another spend is pending", 409);
       const note = noteFromJson(row.note_json);
 
+      step("sync registry tree");
       const tree = await syncRegistryTree(this.pub, this.cfg.deployment.registry, BigInt(this.cfg.deployment.deployBlock), this.cfg.logsChunk);
+      step(`tree synced (${tree.leaves.length} leaves), reading chain time`);
       const now = await this.chainNow();
       const amount = BigInt(expected.amount);
       const sessionKey = generatePrivateKey();
@@ -477,6 +482,7 @@ export class Vault {
         now: BigInt(now),
       });
       let proof;
+      step("generating Groth16 proof");
       try {
         proof = await proveSpend(w.input);
       } catch {
@@ -484,6 +490,7 @@ export class Vault {
         throw new VaultError("deal rejected");
       }
       if (!(await verifySpend(proof.proof, proof.publicSignals))) throw new VaultError("deal rejected");
+      step("proof generated and verified");
       const sol = toSolidityProof(proof.proof, proof.publicSignals);
 
       const pending: PendingSpend = { nullifier: nullifier.toString(), newNote: w.newNote, sessionId, expiresAt: now + 360 };
@@ -518,7 +525,7 @@ export class Vault {
   async signVoucher(sessionId: Hex, deliveryHash: Hex, price: bigint) {
     const s = this.db.prepare("SELECT * FROM sessions WHERE session_id = ?").get(sessionId) as unknown as SessionRow | undefined;
     if (!s) throw new VaultError("unknown session", 404);
-    const onchain = await this.pub.readContract({ address: this.cfg.deployment.escrow, abi: sessionEscrowAbi, functionName: "getSession", args: [sessionId] });
+    const onchain = await readSession(this.pub, this.cfg.deployment.escrow, sessionId, (x) => x.status >= 2, 15_000);
     if (onchain.status !== 2) throw new VaultError("session is not funded");
     if (price !== BigInt(s.unit_price)) throw new VaultError("price does not match the agreed per-call price");
     if (s.call_count + 1 > s.calls) throw new VaultError("all calls already paid");

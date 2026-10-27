@@ -21,6 +21,7 @@ const vault = new Vault({
   responseDelayMs: envInt("VAULT_RESPONSE_DELAY_MS", 1500),
   sessionSeconds: envInt("VAULT_SESSION_SECONDS", 3600),
   autoRotate: env.VAULT_AUTO_ROTATE !== "0",
+  log: (msg, data) => app.log.info(data ?? {}, msg),
 });
 
 const app = buildVaultServer(vault, {
