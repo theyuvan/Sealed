@@ -21,7 +21,9 @@
     "e2e": "node --import tsx scripts/e2e.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "circuits:fixtures": "tsx packages/prover/scripts/gen-fixtures.ts",
-    "export-abis": "node scripts/export-abis.mjs"
+    "export-abis": "node scripts/export-abis.mjs",
+    "e2e:local": "node --import tsx scripts/e2e.ts --local",
+    "start": "node scripts/start.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

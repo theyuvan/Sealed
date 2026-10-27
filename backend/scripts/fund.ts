@@ -1,30 +1,44 @@
 // Funding helper.
-//   --local                 mint dev stablecoin to the buyer on anvil (dev token only)
+//   --local                 mint dev stablecoin to the buyer on anvil (dev token only; reads .env.local)
 //   (no flag)               show HSK gas and stablecoin balances of every service wallet
 //   --send-gas <HSK>        send HSK for gas from the deployer to each service wallet (asks first)
+//   --mint-dev <units>      testnet only: mint the DEV stablecoin to the buyer (when PINNED_TOKEN was not set)
 import { createInterface } from "node:readline/promises";
-import { createPublicClient, createWalletClient, formatEther, formatUnits, http, parseEther, type Address } from "viem";
-import { accountFromEnv, chainFor, devTokenAbi, eip3009Abi, envInt, loadDeployment, loadEnv, requireEnv } from "@sealed/core";
+import { createPublicClient, createWalletClient, formatEther, formatUnits, parseEther, type Address } from "viem";
+import { accountFromEnv, chainFor, devTokenAbi, eip3009Abi, envInt, loadDeployment, loadEnv, requireEnv, rpcTransport } from "@sealed/core";
 
 const env = loadEnv();
 const chainId = envInt("CHAIN_ID", 31337);
 const chain = chainFor(chainId, requireEnv("HSK_RPC_URL"));
-const pub = createPublicClient({ chain, transport: http() });
+const pub = createPublicClient({ chain, transport: rpcTransport() });
 const d = loadDeployment(chainId);
 
 const wallets: Record<string, Address> = {};
-for (const k of ["DEPLOYER_PRIVATE_KEY", "COORDINATOR_PRIVATE_KEY", "VAULT_PRIVATE_KEY", "BUYER_WALLET_PRIVATE_KEY", "SELLER_1_PRIVATE_KEY", "SELLER_2_PRIVATE_KEY", "ROGUE_PRIVATE_KEY"]) {
+for (const k of ["DEPLOYER_PRIVATE_KEY", "COORDINATOR_PRIVATE_KEY", "VAULT_PRIVATE_KEY", "BUYER_WALLET_PRIVATE_KEY", "SELLER_1_PRIVATE_KEY", "SELLER_2_PRIVATE_KEY", "ROGUE_PRIVATE_KEY", "HSP_STANDIN_RELAYER_PRIVATE_KEY"]) {
   if (env[k]) wallets[k.replace("_PRIVATE_KEY", "")] = accountFromEnv(k).address;
 }
 
 if (process.argv.includes("--local")) {
   if (chainId !== 31337) throw new Error("--local only works on the local anvil chain");
   const deployer = accountFromEnv("DEPLOYER_PRIVATE_KEY");
-  const w = createWalletClient({ chain, transport: http(), account: deployer });
+  const w = createWalletClient({ chain, transport: rpcTransport(), account: deployer });
   const hash = await w.writeContract({ address: d.token, abi: devTokenAbi, functionName: "mint", args: [wallets.BUYER_WALLET!, 1_000_000_000n], chain, account: deployer });
   await pub.waitForTransactionReceipt({ hash });
   console.log(`minted 1000 dev USD to the buyer wallet ${wallets.BUYER_WALLET}`);
   process.exit(0);
+}
+
+const m = process.argv.indexOf("--mint-dev");
+if (m >= 0) {
+  // only the DevEIP3009Token deployed when PINNED_TOKEN is unset; its minter is the deployer
+  if (chainId === 177) throw new Error("--mint-dev is not available on mainnet");
+  const amount = BigInt(process.argv[m + 1] ?? "0");
+  if (amount <= 0n) throw new Error("--mint-dev needs an amount in base units");
+  const deployer = accountFromEnv("DEPLOYER_PRIVATE_KEY");
+  const w = createWalletClient({ chain, transport: rpcTransport(), account: deployer });
+  const hash = await w.writeContract({ address: d.token, abi: devTokenAbi, functionName: "mint", args: [wallets.BUYER_WALLET!, amount], chain, account: deployer });
+  await pub.waitForTransactionReceipt({ hash });
+  console.log(`minted ${amount} dev token units to the buyer wallet: ${hash}`);
 }
 
 const decimals = await pub.readContract({ address: d.token, abi: eip3009Abi, functionName: "decimals" });
@@ -48,7 +62,7 @@ if (i >= 0) {
     process.exit(1);
   }
   const deployer = accountFromEnv("DEPLOYER_PRIVATE_KEY");
-  const w = createWalletClient({ chain, transport: http(), account: deployer });
+  const w = createWalletClient({ chain, transport: rpcTransport(), account: deployer });
   for (const [name, to] of targets) {
     const hash = await w.sendTransaction({ to, value: amount, chain, account: deployer });
     await pub.waitForTransactionReceipt({ hash });

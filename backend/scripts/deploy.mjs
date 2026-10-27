@@ -33,6 +33,8 @@ console.log(`deployer ${privateKeyToAccount(process.env.DEPLOYER_PRIVATE_KEY).ad
 if (existsSync(out)) console.log(`note: ${out} exists and will be overwritten:\n${readFileSync(out, "utf8")}`);
 
 const env = { ...process.env, COORDINATOR_ADDRESS: coordinator, CONFIRM_MAINNET: "" };
+// forge cannot parse empty optional values (e.g. `PINNED_TOKEN=` left blank in .env)
+for (const k of ["PINNED_TOKEN", "ESCROW_OWNER"]) if (!env[k]) delete env[k];
 if (network === "mainnet") {
   const a = await ask('This deploys to HSK MAINNET and spends real HSK for gas. Type "deploy to mainnet" to continue: ');
   if (a !== "deploy to mainnet") {
