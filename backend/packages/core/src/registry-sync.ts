@@ -14,6 +14,19 @@ export async function syncRegistryTree(
   fromBlock: bigint,
   chunk = 5_000n,
 ): Promise<MerkleTree> {
+  // Load-balanced RPCs can answer the head from one node and the logs/root from a node that is a
+  // block or two behind ("block range extends beyond current head", "header not found"): retry.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await syncOnce(client, registry, fromBlock, chunk);
+    } catch (e) {
+      if (attempt >= 4 || String((e as Error).message).includes("missing leaf")) throw e;
+      await new Promise((r) => setTimeout(r, 1_500));
+    }
+  }
+}
+
+async function syncOnce(client: PublicClient, registry: Address, fromBlock: bigint, chunk: bigint): Promise<MerkleTree> {
   // cacheTime 0: a cached (stale) head would give a consistent but outdated tree
   const latest = await client.getBlockNumber({ cacheTime: 0 });
   const leaves = new Map<number, bigint>();

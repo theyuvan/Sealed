@@ -1,4 +1,5 @@
-import { type Address, type Hex } from "viem";
+import { type Address, type Hex, type PublicClient } from "viem";
+import { sessionEscrowAbi } from "./abi.ts";
 
 /** What the Vault returns from /proof/spend (all numbers as decimal strings). */
 export interface SpendProofResponse {
@@ -31,3 +32,22 @@ export function openSessionArgs(p: SpendProofResponse) {
 }
 
 export const SESSION_STATUS = ["None", "Opened", "Funded", "Closed", "Refunded"] as const;
+
+/**
+ * Reads a session, re-reading for up to `timeoutMs` until `ready` holds. Load-balanced RPCs (HSK
+ * testnet) can serve a read from a node that has not seen a just-mined transaction yet.
+ */
+export async function readSession(
+  pub: PublicClient,
+  escrow: Address,
+  sessionId: Hex,
+  ready: (s: { status: number }) => boolean = (s) => s.status !== 0,
+  timeoutMs = 20_000,
+) {
+  const end = Date.now() + timeoutMs;
+  for (;;) {
+    const s = await pub.readContract({ address: escrow, abi: sessionEscrowAbi, functionName: "getSession", args: [sessionId] });
+    if (ready(s) || Date.now() >= end) return s;
+    await new Promise((r) => setTimeout(r, 1_000));
+  }
+}

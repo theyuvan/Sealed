@@ -8,7 +8,6 @@ import {
   type WalletClient,
   createPublicClient,
   createWalletClient,
-  http,
   isAddressEqual,
   isHex,
   keccak256,
@@ -30,12 +29,12 @@ import {
   chainFor,
   dealCartHash,
   merchantAuthorization,
+  readSession,
   sessionEscrowAbi,
   sessionPaymentRequestId,
   signQuote,
   unitsToDecimal,
-  voucherDomain,
-} from "@sealed/core";
+  voucherDomain, rpcTransport } from "@sealed/core";
 import { orderRequestMessage } from "@sealed/coordinator";
 import { buildProduct } from "./data.ts";
 
@@ -103,8 +102,8 @@ const roundUp = (x: bigint, m: bigint) => ((x + m - 1n) / m) * m;
 
 export function buildSeller(cfg: SellerConfig): FastifyInstance & { probeLog: { round: number; quote: string; buyerOffer: string | null }[] } {
   const chain = chainFor(cfg.chainId, cfg.rpcUrl);
-  const pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) }) as PublicClient;
-  const wallet: WalletClient = createWalletClient({ chain, transport: http(cfg.rpcUrl), account: cfg.account });
+  const pub = createPublicClient({ chain, transport: rpcTransport(cfg.rpcUrl) }) as PublicClient;
+  const wallet: WalletClient = createWalletClient({ chain, transport: rpcTransport(cfg.rpcUrl), account: cfg.account });
   const app = Fastify({ logger: false }) as unknown as FastifyInstance & { probeLog: { round: number; quote: string; buyerOffer: string | null }[] };
   app.decorate("probeLog", []);
 
@@ -201,7 +200,7 @@ export function buildSeller(cfg: SellerConfig): FastifyInstance & { probeLog: { 
   app.post("/hsp/order", async (req) => {
     const b = z.object({ sessionId: z.string().refine((s) => isHex(s) && s.length === 66) }).parse(req.body);
     const sessionId = b.sessionId as Hex;
-    const s = await pub.readContract({ address: cfg.deployment.escrow, abi: sessionEscrowAbi, functionName: "getSession", args: [sessionId] });
+    const s = await readSession(pub, cfg.deployment.escrow, sessionId);
     if (s.status !== 1 || !isAddressEqual(s.seller, cfg.account.address)) throw Object.assign(new Error("not an open session of this seller"), { statusCode: 400 });
     // the session must be for one of our own quotes: recompute its cart hash
     const q = [...quotes.values()].find((x) => {
@@ -253,7 +252,7 @@ export function buildSeller(cfg: SellerConfig): FastifyInstance & { probeLog: { 
     }
     const st = sessions.get(sessionId.toLowerCase());
     if (!st || st.item.id !== it.id) return reply.code(404).send({ error: "unknown session" });
-    const s = await pub.readContract({ address: cfg.deployment.escrow, abi: sessionEscrowAbi, functionName: "getSession", args: [sessionId as Hex] });
+    const s = await readSession(pub, cfg.deployment.escrow, sessionId as Hex, (x) => x.status >= 2, 15_000);
     if (s.status !== 2) return reply.code(402).send({ error: "session not funded" });
 
     const callId = req.headers["x-sealed-call"] as string | undefined;
@@ -286,7 +285,7 @@ export function buildSeller(cfg: SellerConfig): FastifyInstance & { probeLog: { 
       .parse(req.body);
     const st = sessions.get(b.voucher.sessionId.toLowerCase());
     if (!st) throw Object.assign(new Error("unknown session"), { statusCode: 404 });
-    const s = await pub.readContract({ address: cfg.deployment.escrow, abi: sessionEscrowAbi, functionName: "getSession", args: [st.sessionId] });
+    const s = await readSession(pub, cfg.deployment.escrow, st.sessionId);
     const v = { sessionId: b.voucher.sessionId as Hex, cumulativeAmount: BigInt(b.voucher.cumulativeAmount), callCount: b.voucher.callCount, deliveryHashChain: b.voucher.deliveryHashChain as Hex };
     const signer = await recoverTypedDataAddress({ domain: voucherDomain(cfg.chainId, cfg.deployment.escrow), types: VOUCHER_TYPES, primaryType: "Voucher", message: v, signature: b.signature as Hex });
     if (!isAddressEqual(signer, s.sessionKey)) throw Object.assign(new Error("voucher not signed by the session key"), { statusCode: 400 });

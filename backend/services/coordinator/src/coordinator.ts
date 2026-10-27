@@ -6,7 +6,6 @@ import {
   type WalletClient,
   createPublicClient,
   createWalletClient,
-  http,
   isAddressEqual,
   keccak256,
   parseEventLogs,
@@ -24,14 +23,14 @@ import {
   explorerTx,
   hspStatusClass,
   merchantAuthorization,
+  readSession,
   openDb,
   type Db,
   sessionCartMandateId,
   sessionEscrowAbi,
   sessionPaymentRequestId,
   unitsToDecimal,
-  verifyWebhook,
-} from "@sealed/core";
+  verifyWebhook, rpcTransport } from "@sealed/core";
 
 export interface CoordinatorConfig {
   chainId: number;
@@ -109,8 +108,8 @@ export class Coordinator {
   constructor(readonly cfg: CoordinatorConfig) {
     this.db = openDb(cfg.dbPath, SCHEMA);
     const chain = chainFor(cfg.chainId, cfg.rpcUrl);
-    this.pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) }) as PublicClient;
-    this.wallet = createWalletClient({ chain, transport: http(cfg.rpcUrl), account: cfg.account });
+    this.pub = createPublicClient({ chain, transport: rpcTransport(cfg.rpcUrl) }) as PublicClient;
+    this.wallet = createWalletClient({ chain, transport: rpcTransport(cfg.rpcUrl), account: cfg.account });
     this.hsp = new HspClient(cfg.hsp);
   }
 
@@ -118,8 +117,9 @@ export class Coordinator {
     this.cfg.log?.(msg, data);
   }
 
+  /** Session as the chain sees it; re-read briefly so a lagging RPC node does not hide a just-opened session. */
   private session(sessionId: Hex) {
-    return this.pub.readContract({ address: this.cfg.deployment.escrow, abi: sessionEscrowAbi, functionName: "getSession", args: [sessionId] });
+    return readSession(this.pub, this.cfg.deployment.escrow, sessionId);
   }
 
   order(sessionId: Hex): OrderRow | undefined {

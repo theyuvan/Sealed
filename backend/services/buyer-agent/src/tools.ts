@@ -5,7 +5,6 @@ import {
   type WalletClient,
   createPublicClient,
   createWalletClient,
-  http,
   isAddressEqual,
   keccak256,
   stringToHex,
@@ -27,8 +26,7 @@ import {
   openSessionArgs,
   readTokenDomain,
   sessionEscrowAbi,
-  unitsToDecimal,
-} from "@sealed/core";
+  unitsToDecimal, rpcTransport } from "@sealed/core";
 import { VaultAgentClient, VaultCallError } from "./vault-client.ts";
 
 export interface BuyerToolsConfig {
@@ -108,8 +106,8 @@ export class BuyerTools {
 
   constructor(readonly cfg: BuyerToolsConfig) {
     const chain = chainFor(cfg.chainId, cfg.rpcUrl);
-    this.pub = createPublicClient({ chain, transport: http(cfg.rpcUrl) }) as PublicClient;
-    this.walletClient = createWalletClient({ chain, transport: http(cfg.rpcUrl), account: cfg.wallet });
+    this.pub = createPublicClient({ chain, transport: rpcTransport(cfg.rpcUrl) }) as PublicClient;
+    this.walletClient = createWalletClient({ chain, transport: rpcTransport(cfg.rpcUrl), account: cfg.wallet });
     this.hsp = new HspClient({ appKey: "", appSecret: "", merchantPrivateKey: "", merchantName: "", webhookSecret: "", headers: {} as never, networkName: "", coin: "", webhookEventIdField: "", successStatuses: [], failedStatuses: [], localStandIn: false, ...cfg.hsp });
   }
 
@@ -348,10 +346,15 @@ export class BuyerTools {
       if (s.used === 0) return { error: "no calls made; the escrow refunds everything after the deadline (closeAfterDeadline)", deadline: onchain.deadline.toString() };
       await this.sellerPost(s.sellerUrl, "/close", { sessionId: s.sessionId });
     }
-    const r = await fetch(`${this.cfg.coordinatorUrl}/receipts/${s.sessionId}`);
-    const receipt = (await r.json()) as Record<string, unknown>;
-    if (!r.ok) return { error: "no receipt yet", detail: receipt };
-    return { receipt };
+    // the close transaction may not be visible on every RPC node yet: retry for a few seconds
+    for (let i = 0; i < 15; i++) {
+      const r = await fetch(`${this.cfg.coordinatorUrl}/receipts/${s.sessionId}`);
+      const receipt = (await r.json()) as Record<string, unknown>;
+      if (r.ok) return { receipt };
+      if (r.status !== 404) return { error: "receipt lookup failed", detail: receipt };
+      await new Promise((res) => setTimeout(res, 2_000));
+    }
+    return { error: "no receipt yet" };
   }
 
   /** For tests: whether a seller address belongs to a discovered card. */
