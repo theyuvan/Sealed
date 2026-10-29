@@ -52,6 +52,7 @@ Other tools:
 |---|---|
 | `npm run circuits:setup` | Rebuilds the circuit, the Groth16 setup and `contracts/src/SpendVerifier.sol`. **This changes the verifier.** Then rerun `npm run circuits:fixtures`. |
 | `npm run fund` | Balances of every service wallet. `-- --send-gas 0.5` sends HSK for gas and asks first. |
+| `npm run hsp:check` | HSP readiness: merchant key, pinned token vs HSP's supported list, a sample cart against the gateway's rules, and (with credentials) one read-only signed request. Prints the public key to register. |
 | `npx tsx services/adversary/src/main.ts --runs 2000` | Budget-inference report (`--live` scores the Vault's recorded traces). |
 | `npx tsx scripts/auditor-decrypt.ts` | Auditor view of sealed rules (needs `AUDITOR_PRIVATE_KEY`). |
 
@@ -71,6 +72,37 @@ Notes from the testnet runs:
 - The Vault allows 3 negotiations per seller (kept across mandates). When a seller is used up, point `E2E_SELLER_URL` at another one.
 - Gemini free tier: 20 requests/day per model, and one purchase is about 13–15 requests. Change `GEMINI_MODEL` or enable billing when it runs out.
 - `npm run e2e:local` runs against the local stack from `npm run dev` (`.env.local`).
+
+## MCP server for the buyer tools
+
+`npm run buyer:mcp` serves the buyer's seven tools (`discover_sellers`, `request_quote`, `propose`, `open_session`, `call_service`, `check_delivery`, `close_session`) over MCP on stdio, so any MCP client can act as the buyer. It uses the same `BuyerTools` code as the built-in LLM agent and the same tool schemas (`TOOL_DEFS`), so there is nothing extra to keep in sync.
+
+Start the stack first (`npm run dev`, or `npm start` on testnet), then register the server with your client. These launch commands work from any directory:
+
+```jsonc
+// Claude Desktop: claude_desktop_config.json
+{ "mcpServers": { "sealed-buyer": {
+    "command": "npm",
+    "args": ["--prefix", "C:/Users/<you>/Sealed/backend", "run", "--silent", "buyer:mcp"]
+} } }
+```
+
+```bash
+# Claude Code
+claude mcp add sealed-buyer -- npm --prefix C:/Users/<you>/Sealed/backend run --silent buyer:mcp
+```
+
+On Node older than 22.13, add `"env": { "NODE_OPTIONS": "--experimental-sqlite" }` (Claude Desktop) or `-e NODE_OPTIONS=--experimental-sqlite` (Claude Code). The server reads `backend/.env` itself (buyer wallet key, Vault agent token); the client never needs those values.
+
+What the client gets, and what it does not:
+
+- **No mandate.** The tool list has no way to read, set, reveal or revoke the mandate. Budget, caps and allow-lists stay in the Vault; the tools return only offers, accept/counter/walk, deliveries and receipts. The process also removes every other secret from its environment before the first tool runs.
+- **Untrusted caller.** Arguments are checked against the declared schema: unknown arguments, missing ones and non-strings are refused before any tool runs.
+- **One tool at a time.** Calls are queued, so negotiation and payment steps never interleave.
+- **Spending tools are flagged.** `open_session`, `call_service` and `close_session` carry `destructiveHint: true` and `check_delivery` and `discover_sellers` are read-only, so clients can ask for confirmation before money moves.
+- **Same limits as the LLM agent.** Every spend still needs a Vault proof and a delivery that passed the deterministic checks. The Vault's probe limits (40 evaluations per mandate, 3 negotiations per seller, 30 s cooldown) apply to MCP clients too.
+
+Notes: one server process is one buyer session, with sessions and quotes kept in memory. `open_session` waits for chain confirmation and the HSP funding, which can exceed an MCP client's default request timeout on testnet (60 s in the TypeScript SDK): raise it if the client allows.
 
 ## Tests
 
@@ -112,39 +144,36 @@ Sealed reduces behavioral leakage; it does not eliminate it.
 9. **Allow-list sizes.** Up to 16 categories and 16 sellers per mandate (Merkle depth 4).
 10. **Trusted setup.** Phase 1 is the PSE Perpetual Powers of Tau (`ppot_0080_15`), because the Hermez mirror returns 403. Phase 2 is one random contribution plus a beacon: a hackathon setup, not a ceremony.
 
-## TODO(HSP-DOCS): fill from the official HSP manual
+## HSP wire details: verified against HashKey's docs, and what is still open
 
-All of these are config values; defaults are in `backend/packages/core/src/hsp.ts`, `hsp-crypto.ts`, `hsp-client.ts`, `hsp-payer.ts` and `backend/.env.example`. The defaults were taken from public HSK hackathon integrations, not from HashKey.
+Sources: the [HashKey Merchant docs](https://hashkey-merchant.github.io/) (v2.3.0, 2026-10-16), the [official SDKs](https://github.com/hashkey-merchant/sdks) (Go, Node, Python) and the [AP2 repo](https://github.com/google-agentic-commerce/AP2). Run `npm run hsp:check` to test your setup against them (offline checks need no credentials; with credentials it also sends one read-only signed request).
 
-1. **Base URLs.** Merchant API base (`HSP_BASE_URL`, QA and production) and payer/checkout base (`HSP_PAYER_BASE_URL`).
-2. **Paths.** Create order, payment status query, cart lookup by flow id, pay-mandate (`HSP_PATH_*`).
-3. **Request signing.**
-   - Header names: `X-App-Key`, `X-Timestamp`, `X-Nonce`, `X-Signature`.
-   - HMAC message layout: `METHOD\nPATH\nQUERY\nsha256(body)\nts\nnonce`.
-   - How the body is canonicalized.
-4. **Response envelope.** Assumed `{code: 0, msg, data}`.
-5. **`merchant_authorization` JWT.** ES256K; claims `iss`, `sub`, `aud=HashkeyMerchant`, `iat`, `exp`, `jti`, `cart_hash`; `cart_hash` = sha256 hex of canonical JSON.
-6. **Cart mandate fields.** `supported_methods` value, x402 `data` fields, network names for 133 and 177 (`HSP_NETWORK_NAME`), coin symbol (`HSP_COIN`), id formats.
-7. **Payment mandate and x402 payload.** Layout, the `payment_details_id` format, and `accepted.network = eip155:<id>`.
-8. **`user_authorization` JWT.** Assumed HS256 keyed with the payer address, with `transaction_data` = [cart hash, payment hash].
-9. **Webhooks.**
-   - Signature header name and the `t=…,v1=…` format.
-   - Which secret signs it (`HSP_WEBHOOK_SECRET` vs the app secret).
-   - The event-id field used for dedupe (`HSP_WEBHOOK_EVENT_ID_FIELD`).
-   - The body shape.
-10. **Payment status.** Status values (`HSP_SUCCESS_STATUSES`, `HSP_FAILED_STATUSES`) and record fields (`cart_mandate_id`, `payment_request_id`, `flow_id`, `tx_signature`). Also whether `flow_id` is returned directly or has to be parsed from `payment_url`.
+### Verified
 
-## Also unverified (README §14 and chain facts)
+| Area | Detail |
+|---|---|
+| Hosts | QA/testnet `https://merchant-qa.hashkeymerchant.com`; staging `https://merchant-stg.hashkeymerchant.com` and production `https://hsp.hashkey.com` accept mainnet tokens only |
+| Merchant routes | `POST /api/v1/merchant/orders` (one-time), `POST .../orders/reusable`, `GET .../merchant/payments`, `GET .../payments/reusable`; envelope `{code, msg, data}`, code 0 = success |
+| Request signing | `X-App-Key`, `X-Timestamp` (±300 s), `X-Nonce`, `X-Signature` = hex HMAC-SHA256(app_secret, `METHOD\nPATH\nQUERY\nsha256hex(canonical body)\ntimestamp\nnonce`) |
+| `merchant_authorization` | ES256K JWT; claims `iss`, `sub` (merchant name), `aud`, `iat`, `exp`, `jti`, `cart_hash` = sha256 hex of canonical JSON of `contents` |
+| Cart rules | `x402Version` 2, `supported_methods` `https://www.x402.org/`, all currencies `USD`, `sum(display_items) = total`, RFC 3339 `cart_expiry`; `cart_mandate_id` and `payment_request_id` are each single-use (`40001`, `10004`) |
+| Tokens | Only registered tokens settle. EIP-3009: USDC (and base/arbitrum USDC). Permit2: every USDT and HSK. Sealed needs EIP-3009. Table in `packages/core/src/hsp-registry.ts` |
+| Statuses | `payment-required`, `-submitted`, `-verified`, `-processing`, `-included`, `-safe`, `-finalized` (terminal), `-failed` (terminal). Webhooks fire on included, safe, finalized and failed |
+| Webhook | HTTPS only, 2xx within 10 s, `X-Signature: t=<unix>,v1=hex(HMAC(app_secret, t + "." + rawBody))`, ±300 s, 6 retries (1 m, 5 m, 15 m, 1 h, 6 h, 24 h). Body has `request_id`, `payment_request_id`, `cart_mandate_id`, `status`, `tx_signature` and amounts as decimals |
+| Cart lookup by flow | `GET /api/v1/checkout/orders/{flow_id}`, no auth, returns `{payment_request_id, cartmandate, status, amount}` (Go SDK `routes.go`) |
+| Payment mandate shape | `payment_mandate_contents` {`payment_mandate_id` = payment_request_id, `payment_details_id` = client-generated request id, `payment_details_total`, `payment_response`, `merchant_agent`, `timestamp`} + `user_authorization` (Go SDK `types/ap2.go`) |
+| EIP-3009 typed data | `TransferWithAuthorization(from,to,value,validAfter,validBefore,nonce)` with the token's own name and version (Go SDK `crypto/signing.go`) |
 
-- **The stablecoin.** Which one HSP settles on mainnet, and its address (`PINNED_TOKEN`; no address was invented). Also needed:
-  - Confirm it implements `transferWithAuthorization` and `authorizationState`.
-  - Confirm it emits `AuthorizationUsed`; the coordinator requires that event.
-  - Note its EIP-712 domain `name` and `version`; they're read on chain.
-- **HSP's transfer call.** Whether HSP relays `transferWithAuthorization`, as assumed. If it uses `receiveWithAuthorization`, the payee must be the caller, which breaks escrow-as-payee.
-- **Escrow as payee.** Whether an HSP order's `pay_to` can be a contract (the escrow).
-- **Testnet and payer identity.** Whether HSP supports testnet 133, and whether it needs payer identity beyond the paying wallet.
-- **RPC limits.** HSK's `eth_getLogs` range limit (`LOGS_CHUNK`, default 5,000) and whether `--legacy` gas is needed.
-- **Live Claude agent.** Not exercised here (no API key in this environment).
+### Still open (ask HashKey; the registration message lists these)
+
+1. **`POST /api/v1/payment/pay-mandate` request body.** The docs name the route (architecture diagram) but not the body or headers. We send `{flow_id, payment_mandate}`.
+2. **`user_authorization` format.** AP2 defines it as an SD-JWT-VC (an issuer-signed JWT with a `cnf` claim, plus a key-binding JWT with `aud`, `nonce`, `sd_hash`, `transaction_data` = hashes of the cart and payment contents). We currently sign an HS256 JWT keyed by the payer address with `transaction_data`, which a real gateway will probably reject.
+3. **How HSP relays.** `transferWithAuthorization` (assumed) or `receiveWithAuthorization` (would break an escrow payee), and whether `pay_to` may be a contract.
+4. **Fees.** `pay_amount` can exceed `order_amount` (service, network, gas). The coordinator refuses to fund unless HSP's `pay_amount` equals the session cap, so ask for `service_rate` 0.0000 and gas advanced by the merchant.
+5. **A testnet USDC faucet or mint** for chain 133 (`0x8FE3…53c6`), so the buyer wallet can pay.
+6. **JWT `aud` spelling.** Docs say `HashkeyMerchant`, the Node SDK says `HashKeyMerchant` (`HSP_JWT_AUDIENCE` switches it).
+7. **RPC limits.** HSK's `eth_getLogs` range (`LOGS_CHUNK`, default 5,000) and whether `--legacy` gas is needed.
+8. **Live Claude agent.** Not exercised here (no API key in this environment).
 
 ## Mainnet deployment (not done: needs your go-ahead, it spends real HSK)
 

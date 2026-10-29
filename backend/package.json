@@ -18,6 +18,7 @@
     "dev": "node scripts/dev.mjs",
     "deploy": "node scripts/deploy.mjs",
     "fund": "node --import tsx scripts/fund.ts",
+    "buyer:mcp": "tsx services/buyer-agent/src/mcp-main.ts",
     "hsp:check": "node --import tsx scripts/hsp-check.ts",
     "e2e": "node --import tsx scripts/e2e.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",

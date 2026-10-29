@@ -40,11 +40,17 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 - [x] `packages/prover`: witness building, Groth16 proving, verifier calldata
 - [x] `services/vault`: seal, revoke and rotate; offer policy; probe limits; spend proofs; voucher signing; admin and agent tokens kept separate; step logs
 - [x] `services/coordinator`: HSP orders, webhook signature checks, polling, on-chain transfer check, `markFunded`, receipts
-- [x] `services/hsp-standin`: "HSP local stand-in" for development (`HSP_LOCAL_STANDIN=1`, refused on mainnet)
+- [x] HSP aligned with HashKey's official docs and SDKs (signing, ES256K cart JWT, cart rules, statuses, webhooks, token table, cart-by-flow route). What is verified and what is open: [backend/RUNNING.md](backend/RUNNING.md)
+- [x] `packages/core/src/hsp-registry.ts`: HSP's supported tokens per chain, a cart validator for the gateway's rules (checked before every order), and a startup guard: the coordinator refuses real HSP with an unsupported token
+- [x] Coordinator hardening: refuses to fund when HSP's `pay_amount` differs from the session cap (fees), webhook dedupe per status, a fresh `payment_request_id` on retries
+- [x] `npm run hsp:check`: HSP readiness (merchant key, pinned token, sample cart, webhook URL, and one read-only signed request once credentials exist); prints the public key to register
+- [x] HSP merchant key pair generated in `backend/.hsp/` (gitignored)
+- [x] `services/hsp-standin`: "HSP local stand-in" for development (`HSP_LOCAL_STANDIN=1`, refused on mainnet). It now mirrors the real gateway: decimal amounts, included/safe/finalized statuses, `10004` on a reused `payment_request_id`
 - [x] `services/sellers`: honest-1, honest-2, rogue; signed quotes, x402-style delivery with pre-committed hashes, voucher claims, live chain data
 - [x] `services/buyer-agent`: tool loop for **Gemini** (default) or Claude, plus a scripted driver. Every delivery is checked deterministically before any voucher is signed. Runs execute in the background.
-- [x] `services/adversary`: budget-inference error is 0.0% for a budget-in-prompt baseline vs 9.2% for Sealed
-- [x] Tests: core 19, services 41, e2e 9. The e2e tests cover the happy path plus all 6 rogue attacks (injection, urgent fee, probing, trajectory inference, cart swap, proof replay); every attack fails.
+- [x] MCP server for the buyer tools (`npm run buyer:mcp`, stdio): the same seven tools and schemas as the LLM agent, no mandate access, schema-checked arguments, serialized calls, spending tools flagged destructive. Tested in memory with a full purchase and over a real stdio process. Setup in [backend/RUNNING.md](backend/RUNNING.md)
+- [x] `services/adversary`: budget-inference error is 0.0% for a budget-in-prompt baseline vs 9.1% for Sealed; `npx tsx services/adversary/src/main.ts` also writes the demo chart `backend/data/adversary-chart.svg`
+- [x] Tests: core 25, services 48 (plus 1 live-LLM test that needs quota), e2e 9. The e2e tests cover the happy path plus all 6 rogue attacks (injection, urgent fee, probing, trajectory inference, cart swap, proof replay); every attack fails.
 
 ### HSK testnet (chain 133)
 - [x] Contracts deployed (`contracts/deployments/133.json`):
@@ -62,14 +68,12 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 ## To do next
 
 ### This week, before the deadline
-- [ ] **[You]** Ask HashKey for HSP merchant credentials and the HSP manual. Everything under "Blocked on HashKey" below depends on it.
+- [ ] **[You]** Send HashKey the registration message (organization Sealed, public key from `npm run hsp:check`, QA chain 133 USDC) and ask the open questions in RUNNING.md. Everything under "Blocked on HashKey" depends on it.
 - [ ] **[You]** Rotate the Gemini API key (it was shared in chat) and put the new one in `backend/.env`
 - [ ] **[You]** Gemini quota for the demo: enable billing on the Google project, or switch `GEMINI_MODEL` daily. The free tier allows 20 requests per day per model, and one purchase takes 13–15.
 - [ ] **[You]** Top up testnet gas: send 0.2–0.5 HSK to the deployer `0xf2d92EDc27C5b13aCCdfAA673032F89DcF6C71B1`. The Vault wallet is the lowest, at 0.0028 HSK.
 - [ ] **[Me]** Spread the gas to the service wallets (`npm run fund -- --send-gas 0.02`)
 - [ ] **[Me]** Run the 2 live-LLM tests with Gemini when the quota allows
-- [ ] **[Me]** Update README §5 (repository layout) to the `circuits/` / `contracts/` / `backend/` structure
-- [ ] **[Me]** Budget-inference chart for the demo from `services/adversary`
 - [ ] **[You / me]** Set `DATA_ASSETS` to real tokenized-asset contracts on HSK, so the sellers' data describes real assets
 - [ ] **[You]** Frontend (outside this backend work)
 - [ ] **[You]** Demo recording (README §13)
@@ -80,14 +84,15 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 
 ### Blocked on HashKey (HSP)
 - [ ] HSP merchant credentials: app key, app secret, webhook secret; register the merchant public key
-- [ ] Fill the 10 `TODO(HSP-DOCS)` values from the HSP manual (base URLs, endpoint paths, signing headers and layout, response envelope, JWT claims, cart and payment mandate fields, webhook format, status values). The full list is in `backend/RUNNING.md`.
+- [ ] Open HSP details only HashKey can answer: the `pay-mandate` request body, the `user_authorization` format (AP2 SD-JWT-VC vs our HS256 guess), and fee handling. Everything else from the old `TODO(HSP-DOCS)` list is now verified (see RUNNING.md).
+- [ ] After the HSP invite: create the app in the dashboard, set `HSP_BASE_URL`, `HSP_APP_KEY`, `HSP_APP_SECRET`, `HSP_MERCHANT_PRIVATE_KEY` and `HSP_WEBHOOK_PUBLIC_URL`, then run `npm run hsp:check` until it has no failures
 - [ ] Confirm with HashKey (README §14):
-  - [ ] which stablecoin HSP settles, and its address on testnet and mainnet
-  - [ ] that the token supports EIP-3009 and emits `AuthorizationUsed`
+  - [x] which stablecoin HSP settles: USDC (testnet `0x8FE3…53c6`, mainnet `0x054e…8D0a`)
+  - [x] the token answers `authorizationState` on chain (both USDC contracts). Still to see: that `AuthorizationUsed` is emitted on a real relay
   - [ ] that HSP relays `transferWithAuthorization` (`receiveWithAuthorization` would break the escrow as payee)
   - [ ] that an order's `pay_to` can be a contract (the escrow)
-  - [ ] whether HSP supports testnet 133, and whether it needs payer identity beyond the paying wallet
-- [ ] Set `PINNED_TOKEN`, then redeploy the escrow with that token allowed
+  - [x] HSP supports testnet 133 (QA host, USDC and USDT). Still open: whether it needs payer identity beyond the paying wallet
+- [ ] Redeploy the escrow on 133 with the official USDC: `PINNED_TOKEN=0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6 TOKEN_DECIMALS=6 HSP_COIN=USDC`, then `npm run deploy -- --network testnet`. Needs deployer gas and test USDC for the buyer wallet (ask HashKey for a faucet)
 - [ ] Switch off the stand-in (`HSP_LOCAL_STANDIN=0`) and run the testnet purchase against real HSP
 - [ ] Host the coordinator's `/hsp/webhook` over HTTPS and register the URL with HashKey
 
