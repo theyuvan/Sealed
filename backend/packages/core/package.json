@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "dotenv": "^16.4.0",
     "poseidon-lite": "^0.3.0",
     "viem": "^2.37.0",

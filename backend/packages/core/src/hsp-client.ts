@@ -118,15 +118,20 @@ export function hspConfigFromEnv(rawEnv: NodeJS.ProcessEnv, chainId: number): Hs
   const env = Object.fromEntries(Object.entries(rawEnv).filter(([, v]) => v !== "")) as NodeJS.ProcessEnv;
   const localStandIn = env.HSP_LOCAL_STANDIN === "1" || env.HSP_LOCAL_STANDIN === "true";
   if (localStandIn && chainId === 177) throw new Error("HSP local stand-in must not be used on mainnet (CHAIN_ID=177)");
-  const baseUrl = localStandIn ? (env.HSP_STANDIN_URL ?? "http://127.0.0.1:7301") : need(env, "HSP_BASE_URL");
+  const mode: "mcp" | "api" = env.HSP_MODE === "api" || env.HSP_MODE === "mcp" ? env.HSP_MODE : localStandIn ? "api" : "mcp";
+  const mcpUrl = env.HSP_MCP_URL ?? (localStandIn ? (env.HSP_STANDIN_URL ?? "http://127.0.0.1:7301") : "https://mcp-qa.hashkeymerchant.com/");
+  // MCP mode holds no credentials: HSP keeps the App Key/Secret and the merchant key server side
+  const baseUrl = localStandIn ? (env.HSP_STANDIN_URL ?? "http://127.0.0.1:7301") : mode === "mcp" ? (env.HSP_BASE_URL ?? "") : need(env, "HSP_BASE_URL");
   const list = (v: string | undefined, d: string[]) => (v ? v.split(",").map((s) => s.trim().toLowerCase()) : d);
   return {
+    mode,
+    mcpUrl,
     baseUrl,
     payerBaseUrl: localStandIn ? baseUrl : (env.HSP_PAYER_BASE_URL ?? baseUrl),
-    appKey: need(env, "HSP_APP_KEY"),
-    appSecret: need(env, "HSP_APP_SECRET"),
+    appKey: mode === "mcp" ? (env.HSP_APP_KEY ?? "") : need(env, "HSP_APP_KEY"),
+    appSecret: mode === "mcp" ? (env.HSP_APP_SECRET ?? "") : need(env, "HSP_APP_SECRET"),
     merchantPrivateKey: keyOrFile(env.HSP_MERCHANT_PRIVATE_KEY),
-    merchantName: env.HSP_MERCHANT_NAME ?? "Sealed",
+    merchantName: env.HSP_MERCHANT_NAME ?? "Sealed", // MCP mode: the hackathon team's reporting name, identical for create_order and query_payment
     webhookSecret: env.HSP_WEBHOOK_SECRET ?? env.HSP_APP_SECRET ?? "",
     paths: {
       createOrder: env.HSP_PATH_CREATE_ORDER ?? HSP_DEFAULT_PATHS.createOrder,
@@ -147,7 +152,8 @@ export function hspConfigFromEnv(rawEnv: NodeJS.ProcessEnv, chainId: number): Hs
     coin: env.HSP_COIN ?? "USDC",
     webhookEventIdField: env.HSP_WEBHOOK_EVENT_ID_FIELD ?? "request_id",
     // HSP webhooks fire on payment-included, -safe, -finalized and -failed; the coordinator re-checks the chain itself
-    successStatuses: list(env.HSP_SUCCESS_STATUSES, ["payment-included", "payment-safe", "payment-finalized"]),
+    // MCP guide: "payment-included" is still a polling state; safe/finalized are the stop states
+    successStatuses: list(env.HSP_SUCCESS_STATUSES, mode === "mcp" ? ["payment-safe", "payment-finalized"] : ["payment-included", "payment-safe", "payment-finalized"]),
     failedStatuses: list(env.HSP_FAILED_STATUSES, ["payment-failed"]),
     localStandIn,
   };

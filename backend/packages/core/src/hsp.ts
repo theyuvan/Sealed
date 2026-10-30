@@ -11,6 +11,14 @@ import { type Address, type Hex, sha256, stringToHex } from "viem";
  */
 
 export interface HspConfig {
+  /**
+   * "mcp": HSP Agentic Payment (hosted MCP, no App Key/Secret, polling instead of webhooks): the
+   * hackathon QA route. "api": the signed Merchant API (own credentials, webhooks). Default: mcp,
+   * or api for the local stand-in.
+   */
+  mode?: "mcp" | "api";
+  /** HSP Agentic Payment MCP endpoint (Streamable HTTP), e.g. https://mcp-qa.hashkeymerchant.com/ */
+  mcpUrl?: string;
   /** Merchant API base URL, e.g. the QA host from the README. No default on purpose. */
   baseUrl: string;
   /** Payer/checkout API base URL. TODO(HSP-DOCS): may differ from the merchant base. */

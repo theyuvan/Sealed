@@ -3,6 +3,13 @@ import { describe, expect, it } from "vitest";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { keccak256, toHex, zeroHash, type Address } from "viem";
 import {
+  chainTokenProblems,
+  hspConfigFromEnv,
+  checkPreparedPayment,
+  coerceTypedData,
+  findChainToken,
+  fitArguments,
+  parseToolResult,
   MerkleTree,
   verifyMerkleProof,
   zeroHashes,
@@ -260,5 +267,80 @@ describe("HSP registry and cart validation", () => {
     expect(validateCartContents(dev)).toEqual([]);
     const wrongNet = cart({ cfg: { ...hsk, networkName: "hashkey" } });
     expect(validateCartContents(wrongNet, { checkTokens: true }).join()).toMatch(/calls chain 133 "hashkey-testnet"/);
+  });
+});
+
+describe("HSP Agentic Payment client helpers", () => {
+  const escrow = "0x" + "11".repeat(20);
+  const token = "0x" + "22".repeat(20);
+  const payer = "0x" + "33".repeat(20);
+  const prepared = (over: Record<string, unknown> = {}, value = "10000000") =>
+    ({
+      eip712: {
+        domain: { chainId: 31337, verifyingContract: token },
+        types: {},
+        primaryType: "TransferWithAuthorization",
+        message: { from: payer, to: escrow, value, validAfter: "0", validBefore: String(Math.floor(Date.now() / 1000) + 600), nonce: "0x" + "ab".repeat(32) },
+      },
+      token_total_raw: value,
+      pay_to: escrow,
+      ...over,
+    }) as never;
+  const expect_ = { chainId: 31337, token, escrow, payer, amount: 10_000_000n } as never;
+
+  it("fits arguments to the live schema: aliases, stringified objects, unknown and missing arguments", () => {
+    const schema = { properties: { flow_id: { type: "string" }, payer_address: { type: "string" }, blob: { type: "string" } }, required: ["flow_id", "payer_address"] };
+    expect(fitArguments("t", schema, { flow_id: "f", payer: "0x1", blob: { a: 1 } })).toEqual({ flow_id: "f", payer_address: "0x1", blob: '{"a":1}' });
+    expect(() => fitArguments("t", schema, { flow_id: "f", payer: "0x1", extra: 1 })).toThrow(/no argument for "extra"/);
+    expect(() => fitArguments("t", schema, { flow_id: "f" })).toThrow(/also requires payer_address/);
+  });
+
+  it("unwraps results and surfaces tool errors", () => {
+    expect(parseToolResult("t", { content: [{ type: "text", text: '{"flow_id":"f"}' }] })).toEqual({ flow_id: "f" });
+    expect(parseToolResult("t", { content: [{ type: "text", text: '{"code":0,"msg":"ok","data":{"a":1}}' }] })).toEqual({ a: 1 });
+    expect(() => parseToolResult("t", { content: [{ type: "text", text: '{"code":10004,"msg":"dup"}' }] })).toThrow(/10004/);
+    expect(() => parseToolResult("t", { isError: true, content: [{ type: "text", text: "boom" }] })).toThrow(/boom/);
+  });
+
+  it("finds the pinned token in get_chain_config wherever it sits, and checks protocol and decimals", () => {
+    const cfg = { networks: [{ network: "hashkey-testnet", chain_id: 133, tokens: [{ symbol: "USDC", address: token, decimals: 6, payment_protocol: "eip3009" }] }] };
+    const t = findChainToken(cfg, 133, token as never);
+    expect(t).toMatchObject({ network: "hashkey-testnet", symbol: "USDC", decimals: 6, protocol: "eip3009" });
+    expect(chainTokenProblems(t, { decimals: 6 })).toEqual([]);
+    expect(chainTokenProblems(t, { decimals: 18 })[0]).toMatch(/decimals/);
+    expect(chainTokenProblems({ ...t!, protocol: "permit2" }, { decimals: 6 })[0]).toMatch(/eip3009/);
+    expect(findChainToken(cfg, 177, token as never)).toBeNull();
+    expect(chainTokenProblems(null, { decimals: 6 })[0]).toMatch(/does not list/);
+  });
+
+  it("signs only the exact authorization it expects", () => {
+    expect(checkPreparedPayment(prepared(), expect_)).toBeNull();
+    expect(checkPreparedPayment(prepared({}, "10001000"), expect_)).toMatch(/fees added/);
+    expect(checkPreparedPayment(prepared({ pay_to: payer }), expect_)).toMatch(/pay_to/);
+    const wrongTo = prepared();
+    (wrongTo as { eip712: { message: { to: string } } }).eip712.message.to = payer;
+    expect(checkPreparedPayment(wrongTo, expect_)).toMatch(/payee/);
+    const wrongTok = prepared();
+    (wrongTok as { eip712: { domain: { verifyingContract: string } } }).eip712.domain.verifyingContract = payer;
+    expect(checkPreparedPayment(wrongTok, expect_)).toMatch(/wrong token/);
+    expect(checkPreparedPayment(prepared(), { ...(expect_ as object), maxValiditySeconds: 60 } as never)).toMatch(/too long/);
+  });
+
+  it("turns uint fields into bigint for signing", () => {
+    const td = coerceTypedData({ domain: { chainId: "133" }, types: { T: [{ name: "value", type: "uint256" }, { name: "to", type: "address" }] }, primaryType: "T", message: { value: "5", to: "0x1" } });
+    expect(td.message.value).toBe(5n);
+    expect(td.domain.chainId).toBe(133n);
+    expect(td.message.to).toBe("0x1");
+  });
+});
+
+describe("HSP config from env", () => {
+  it("defaults to the MCP route with no credentials when not using the stand-in", () => {
+    const c = hspConfigFromEnv({ HSP_LOCAL_STANDIN: "0" } as never, 133);
+    expect(c).toMatchObject({ mode: "mcp", mcpUrl: "https://mcp-qa.hashkeymerchant.com/", appKey: "", successStatuses: ["payment-safe", "payment-finalized"] });
+  });
+  it("keeps the signed API route for the stand-in and when asked, and then needs credentials", () => {
+    expect(hspConfigFromEnv({ HSP_LOCAL_STANDIN: "1", HSP_APP_KEY: "k", HSP_APP_SECRET: "s" } as never, 31337).mode).toBe("api");
+    expect(() => hspConfigFromEnv({ HSP_MODE: "api", HSP_BASE_URL: "http://x" } as never, 133)).toThrow(/HSP_APP_KEY/);
   });
 });

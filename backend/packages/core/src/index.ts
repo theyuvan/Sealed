@@ -19,3 +19,4 @@ export * from "./escrow.ts";
 export * from "./hsp-payer.ts";
 export * from "./catalog.ts";
 export * from "./hsp-registry.ts";
+export * from "./hsp-mcp.ts";
