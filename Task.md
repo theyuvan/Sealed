@@ -106,3 +106,9 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 - [ ] Production trusted-setup ceremony (phase 2 is currently a single-party hackathon setup)
 - [ ] Separate HSP merchant accounts per seller (today the coordinator creates orders for all sellers)
 - [ ] Stretch / v2 (README): re-credit unused session cap to the sealed budget; prove the auditor ciphertext inside the circuit
+
+## 2026-10-30: HashKey's hackathon guide (HSP Agentic Payment)
+
+Done in code (all tests against the stand-in; nothing run against real HSP yet): MCP client for the eight tools (`packages/core/src/hsp-mcp.ts`), coordinator and buyer on that route (default when `HSP_LOCAL_STANDIN=0`), `SessionEscrow.markFundedByTransfer` (HSP picks the EIP-3009 nonce), MCP stand-in, `npm run hsp:check` for the new route. No App Key/Secret, merchant key or webhook tunnel is needed any more.
+
+Needs you: send HSP this machine's public egress IP for the QA allowlist (guide step 1; `curl https://api.ipify.org` from the machine that runs the coordinator and buyer); get test USDC (`0x8FE3...53c6`) for the buyer wallet; confirm the team's `HSP_MERCHANT_NAME`. Then redeploy the escrow on 133 with the official USDC (new contract function), `npm run hsp:check`, one real purchase.

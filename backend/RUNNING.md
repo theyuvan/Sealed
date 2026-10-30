@@ -52,7 +52,7 @@ Other tools:
 |---|---|
 | `npm run circuits:setup` | Rebuilds the circuit, the Groth16 setup and `contracts/src/SpendVerifier.sol`. **This changes the verifier.** Then rerun `npm run circuits:fixtures`. |
 | `npm run fund` | Balances of every service wallet. `-- --send-gas 0.5` sends HSK for gas and asks first. |
-| `npm run hsp:check` | HSP readiness: merchant key, pinned token vs HSP's supported list, a sample cart against the gateway's rules, and (with credentials) one read-only signed request. Prints the public key to register. |
+| `npm run hsp:check` | HSP Agentic Payment readiness: MCP endpoint alive (egress IP allowlisted?), all eight tools present with their live argument names, `get_chain_config` against the deployed token. Creates nothing. `npm run hsp:check:api` is the older signed Merchant API check. |
 | `npx tsx services/adversary/src/main.ts --runs 2000` | Budget-inference report (`--live` scores the Vault's recorded traces). |
 | `npx tsx scripts/auditor-decrypt.ts` | Auditor view of sealed rules (needs `AUDITOR_PRIVATE_KEY`). |
 
@@ -143,6 +143,23 @@ Sealed reduces behavioral leakage; it does not eliminate it.
 8. **One HSP merchant account.** The coordinator creates orders for every seller; a seller has to sign to request its own session's order. Separate accounts per seller would need separate credentials.
 9. **Allow-list sizes.** Up to 16 categories and 16 sellers per mandate (Merkle depth 4).
 10. **Trusted setup.** Phase 1 is the PSE Perpetual Powers of Tau (`ppot_0080_15`), because the Hermez mirror returns 403. Phase 2 is one random contribution plus a beacon: a hackathon setup, not a ceremony.
+
+## HSP Agentic Payment (the QA route used for the hackathon)
+
+HashKey's hackathon guide (`hsp-agentic-payment_EN.md`, 2026-10-30) replaces the signed Merchant API with a hosted MCP server, `https://mcp-qa.hashkeymerchant.com/` (Streamable HTTP). It is the default whenever `HSP_LOCAL_STANDIN=0`.
+
+| | |
+|---|---|
+| Credentials | none. HSP keeps the App Key/Secret and the ES256K merchant key. Sealed sends `merchant_name` (the team's reporting name, `HSP_MERCHANT_NAME`) and `pay_to` (the SessionEscrow) |
+| Merchant side (coordinator) | `create_order` with the cart mandate (no `merchant_authorization`), then `query_payment` every poll. No webhooks. Funds a session at `payment-safe` / `payment-finalized` only, with `attribution_verified: true` |
+| Payer side (buyer) | `prepare_payment` -> the buyer checks the typed data (chain, token, payee = escrow, amount = session cap, no fee, short validity) -> signs -> `finalize_payment` -> `submit_payment`. A quote lasts 5 minutes; an expired quote (30043) is prepared and signed again |
+| Nonce | chosen by HSP, not our session id. The coordinator therefore identifies the transfer by the transaction hash HSP reports, checks its Transfer/AuthorizationUsed logs, refuses a hash another session already used, and calls `SessionEscrow.markFundedByTransfer` (new; the escrow still requires the tokens to be there) |
+| Tool arguments | read from each tool's live input schema (the guide says to), with known aliases; an argument we cannot place, or one the schema requires that we do not supply, stops the call |
+| Allowlisting | HSP must add the machine's public egress IP before it can connect |
+
+Setup: get the egress IP allowlisted; `HSP_LOCAL_STANDIN=0`; `PINNED_TOKEN=0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6 TOKEN_DECIMALS=6` and redeploy the escrow on chain 133 (needs the new `markFundedByTransfer`, so a redeploy is required anyway); fund the buyer wallet with that token (HashKey provides test tokens); `npm run hsp:check`. The buyer pays from its own key (`BUYER_WALLET_PRIVATE_KEY`), so no OKX Agentic Wallet is needed. Tests run the whole flow against a stand-in that mimics the eight tools (`buildMcpStandIn`, also `HSP_MODE=mcp HSP_LOCAL_STANDIN=1 npm run dev`-style); it proves our side, not HSP's.
+
+Still unknown until the first real run: the exact shape of `get_chain_config`, `get_order` and `query_payment` results (parsed tolerantly), whether HSP adds a fee (`gas_fee_advanced`; the buyer refuses to sign if `token_total_raw` is not the session cap), and whether the relay is `transferWithAuthorization` to our contract address.
 
 ## HSP wire details: verified against HashKey's docs, and what is still open
 
