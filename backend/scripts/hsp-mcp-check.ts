@@ -19,6 +19,9 @@ if (cfg.localStandIn) mark(false, "HSP_LOCAL_STANDIN is on", "This check is for 
 mark(chainId === 133, "CHAIN_ID is the HashKey testnet (133)", chainId === 133 ? "" : `CHAIN_ID is ${chainId}; the QA environment settles on testnet`);
 mark(Boolean(env.HSP_MERCHANT_NAME), "HSP_MERCHANT_NAME is set", `"${cfg.merchantName}" is the team's reporting name: it must be spelled the same at create_order and query_payment, and it decides post-event aggregation`);
 
+const egress = await fetch("https://api.ipify.org", { signal: AbortSignal.timeout(8_000) }).then((r) => r.text(), () => "(could not look up)");
+mark(null, "this machine's public egress IP", `${egress}: this is the address HSP must have allowlisted for this machine (guide step 1)`);
+
 const base = new URL(cfg.mcpUrl!);
 const health = await fetch(new URL("/health", base), { signal: AbortSignal.timeout(10_000) }).then(
   async (r) => ({ ok: r.ok, text: (await r.text()).slice(0, 80) }),
