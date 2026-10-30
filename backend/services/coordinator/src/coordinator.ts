@@ -196,6 +196,12 @@ export class Coordinator {
     return this.orderView(row);
   }
 
+  /** Every order, newest first, for the owner dashboard. */
+  sessions() {
+    const rows = this.db.prepare("SELECT *, created_at AS createdAt FROM orders ORDER BY created_at DESC LIMIT 100").all() as unknown as (OrderRow & { createdAt: number })[];
+    return rows.map((o) => ({ sessionId: o.session_id, seller: o.seller, amount: o.amount, status: o.status, flowId: o.flow_id, hspTx: o.hsp_tx, fundTx: o.fund_tx, createdAt: o.createdAt }));
+  }
+
   private orderView(o: OrderRow) {
     return { sessionId: o.session_id, cartMandateId: o.cart_mandate_id, paymentRequestId: o.payment_request_id, flowId: o.flow_id, paymentUrl: o.payment_url, hspOrderId: o.hsp_order_id, status: o.status };
   }

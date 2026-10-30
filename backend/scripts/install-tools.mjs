@@ -25,7 +25,8 @@ if (!existsSync(join(bin, `forge${exe}`))) {
   const ext = win ? "zip" : "tar.gz";
   const archive = join(bin, `foundry.${ext}`);
   await download(`https://github.com/foundry-rs/foundry/releases/download/${FOUNDRY}/foundry_${FOUNDRY}_${plat}_${arch}.${ext}`, archive);
-  if (win) run("tar", ["-xf", archive, "-C", bin]);
+  // Windows: use the system bsdtar; a GNU tar earlier on PATH (Git Bash) reads "C:" as a remote host and fails
+  if (win) run(join(process.env.SystemRoot ?? "C:\Windows", "System32", "tar.exe"), ["-xf", archive, "-C", bin]);
   else run("tar", ["-xzf", archive, "-C", bin]);
   rmSync(archive);
 }

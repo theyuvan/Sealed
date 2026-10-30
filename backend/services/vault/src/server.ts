@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest }
 import { z } from "zod";
 import { type Address, type Hex, isAddress, isHex } from "viem";
 import { type DealCart, type SignedQuote } from "@sealed/core";
+import { verifySpend } from "@sealed/prover";
 import { type Vault, VaultError } from "./vault.ts";
 
 export type Role = "admin" | "agent";
@@ -147,6 +148,13 @@ export function buildVaultServer(vault: Vault, o: VaultServerOptions): FastifyIn
   app.post("/mandate/rotate", async () => vault.rotate());
   app.get("/mandate/status", async () => vault.status());
   app.get("/traces", async () => vault.traces());
+  app.get("/meta", async () => vault.meta());
+  app.get("/proofs", async () => vault.proofs());
+  // anyone can check a Groth16 proof against the verification key; this is the same check SpendVerifier does on chain
+  app.post("/circuit/verify", async (req) => {
+    const b = z.object({ proof: z.object({ pi_a: z.array(z.string()), pi_b: z.array(z.array(z.string())), pi_c: z.array(z.string()) }).passthrough(), publicSignals: z.array(z.string()).length(12) }).parse(req.body);
+    return { valid: await verifySpend(b.proof as never, b.publicSignals).catch(() => false) };
+  });
 
   // ---- agent (buyer LLM tools)
 

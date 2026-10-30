@@ -178,6 +178,26 @@ describe("vault lifecycle", () => {
     expect(s.status).toBe(1);
   });
 
+  it("owner view: the proof, its named public signals and the circuit are readable by the admin only, and the proof verifies", async () => {
+    expect((await call(AGENT, "GET", "/proofs")).status).toBe(403);
+    expect((await call(AGENT, "GET", "/meta")).status).toBe(403);
+    const list = (await call(ADMIN, "GET", "/proofs")).body as any[];
+    const p = list.find((x) => x.sessionId === proof.sessionId.toLowerCase());
+    expect(p.verifiedLocally).toBe(true);
+    expect(p.provingMs).toBeGreaterThan(0);
+    expect(Object.keys(p.publicSignals)).toEqual(["root", "nullifier", "newCommitment", "revTag", "amount", "category", "seller", "token", "cartHash", "sessionId", "now", "sessionKeyHash"]);
+    expect(p.publicSignals.amount).toBe("10000000");
+    // nothing about the remaining budget or the cap is in what the owner view lists for a proof
+    expect(JSON.stringify(p)).not.toMatch(/maxRemaining|perDealCap/);
+    const ok = (await call(ADMIN, "POST", "/circuit/verify", { proof: p.proof, publicSignals: p.rawPublicSignals })).body;
+    expect(ok.valid).toBe(true);
+    const tampered = p.rawPublicSignals.map((x: string, i: number) => (i === 4 ? "1" : x)); // a different amount
+    expect((await call(ADMIN, "POST", "/circuit/verify", { proof: p.proof, publicSignals: tampered })).body.valid).toBe(false);
+    const meta = (await call(ADMIN, "GET", "/meta")).body;
+    expect(meta.circuit).toMatchObject({ protocol: "groth16", nPublic: 12 });
+    expect(meta.circuit.domainSize).toBeGreaterThan(1000);
+  });
+
   it("only one proof per negotiation", async () => {
     const r = await call(AGENT, "POST", "/proof/spend", { negotiationId, cart: vault.expectedCart(negotiationId) });
     expect(r.status).toBe(400);

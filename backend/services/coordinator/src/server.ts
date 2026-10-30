@@ -33,6 +33,8 @@ export function buildCoordinatorServer(c: Coordinator, o: { logger?: boolean } =
     return c.createOrder(b.sessionId as Hex, b.sellerSignature as Hex, b.merchantLabel);
   });
 
+  app.get("/sessions", async () => c.sessions());
+
   app.get("/hsp/orders/:sessionId", async (req, reply) => {
     const o = c.order((req.params as { sessionId: Hex }).sessionId);
     if (!o) return reply.code(404).send({ error: "no order" });

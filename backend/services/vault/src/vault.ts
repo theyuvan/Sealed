@@ -47,7 +47,7 @@ import {
   toField,
   voucherDomain,
   EMPTY_DELIVERY_CHAIN, rpcTransport } from "@sealed/core";
-import { buildSpendWitness, proveSpend, toSolidityProof, verifySpend } from "@sealed/prover";
+import { PUBLIC_SIGNALS, buildSpendWitness, circuitInfo, proveSpend, toSolidityProof, verifySpend } from "@sealed/prover";
 
 export interface VaultConfig {
   chainId: number;
@@ -155,6 +155,15 @@ CREATE TABLE IF NOT EXISTS negotiations (
   state_json TEXT NOT NULL,
   status TEXT NOT NULL,
   accepted_json TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS proofs (
+  session_id TEXT PRIMARY KEY,
+  seller TEXT NOT NULL,
+  public_signals TEXT NOT NULL,
+  proof TEXT NOT NULL,
+  proving_ms INTEGER NOT NULL,
+  verified INTEGER NOT NULL,
   created_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS trace (
@@ -483,6 +492,7 @@ export class Vault {
       });
       let proof;
       step("generating Groth16 proof");
+      const t0 = Date.now();
       try {
         proof = await proveSpend(w.input);
       } catch {
@@ -490,7 +500,12 @@ export class Vault {
         throw new VaultError("deal rejected");
       }
       if (!(await verifySpend(proof.proof, proof.publicSignals))) throw new VaultError("deal rejected");
-      step("proof generated and verified");
+      const provingMs = Date.now() - t0;
+      step(`proof generated and verified in ${provingMs} ms`);
+      // the proof and its public signals are public (the chain sees them); keep them for the owner view
+      this.db
+        .prepare("INSERT OR REPLACE INTO proofs (session_id, seller, public_signals, proof, proving_ms, verified, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)")
+        .run(sessionId.toLowerCase(), expected.seller, JSON.stringify(proof.publicSignals), JSON.stringify(proof.proof), provingMs, Date.now());
       const sol = toSolidityProof(proof.proof, proof.publicSignals);
 
       const pending: PendingSpend = { nullifier: nullifier.toString(), newNote: w.newNote, sessionId, expiresAt: now + 360 };
@@ -544,6 +559,29 @@ export class Vault {
   }
 
   /** Negotiation traces for the adversary evaluator (quotes and offers only, no mandate values). */
+  /** Spend proofs this Vault made, newest first: public signals by name, timing, local verification. Owner view. */
+  proofs(limit = 50) {
+    const rows = this.db.prepare("SELECT * FROM proofs ORDER BY created_at DESC LIMIT ?").all(limit) as unknown as { session_id: string; seller: string; public_signals: string; proof: string; proving_ms: number; verified: number; created_at: number }[];
+    return rows.map((r) => {
+      const sig = JSON.parse(r.public_signals) as string[];
+      return {
+        sessionId: r.session_id,
+        seller: r.seller,
+        provingMs: r.proving_ms,
+        verifiedLocally: r.verified === 1,
+        createdAt: r.created_at,
+        publicSignals: Object.fromEntries(PUBLIC_SIGNALS.map((n, i) => [n, sig[i]])),
+        proof: JSON.parse(r.proof) as unknown,
+        rawPublicSignals: sig,
+      };
+    });
+  }
+
+  /** What the deployed circuit is, plus the categories the UI can offer. */
+  async meta() {
+    return { chainId: this.cfg.chainId, deployment: this.cfg.deployment, categories: CATEGORIES, circuit: await circuitInfo() };
+  }
+
   traces(): { negotiationId: string; round: number; quote: string; decision: string; offer: string | null }[] {
     return this.db.prepare("SELECT negotiation_id AS negotiationId, round, quote, decision, offer FROM trace ORDER BY negotiation_id, round").all() as never;
   }

@@ -177,3 +177,58 @@ export async function shutdownProver(): Promise<void> {
   const curve = (globalThis as { curve_bn128?: { terminate(): Promise<void> } }).curve_bn128;
   if (curve) await curve.terminate();
 }
+
+export interface CircuitInfo {
+  protocol: string;
+  curve: string;
+  /** declared public signals, in order */
+  publicSignals: readonly string[];
+  nPublic: number;
+  /** from the proving key's header: circuit variables and the power-of-two domain that bounds the constraint count */
+  variables: number | null;
+  domainSize: number | null;
+  zkeyBytes: number;
+  wasmBytes: number;
+  treeDepth: number;
+  allowlistDepth: number;
+}
+
+/** What the built circuit is: read from the verification key and the zkey header, not hard-coded. */
+export async function circuitInfo(): Promise<CircuitInfo> {
+  assertArtifacts();
+  const fs = await import("node:fs/promises");
+  const vk = JSON.parse(await fs.readFile(VKEY_PATH, "utf8")) as { protocol: string; curve: string; nPublic: number };
+  // zkey: "zkey", u32 version, u32 nSections, then (u32 type, u64 size, payload)*; section 2 is the Groth16 header
+  let variables: number | null = null;
+  let domainSize: number | null = null;
+  const fh = await fs.open(ZKEY_PATH, "r");
+  try {
+    const head = Buffer.alloc(12);
+    await fh.read(head, 0, 12, 0);
+    if (head.toString("latin1", 0, 4) === "zkey") {
+      const n = head.readUInt32LE(8);
+      let pos = 12;
+      for (let i = 0; i < n; i++) {
+        const sh = Buffer.alloc(12);
+        await fh.read(sh, 0, 12, pos);
+        const type = sh.readUInt32LE(0);
+        const size = Number(sh.readBigUInt64LE(4));
+        if (type === 2) {
+          const b = Buffer.alloc(Math.min(size, 256));
+          await fh.read(b, 0, b.length, pos + 12);
+          const n8q = b.readUInt32LE(0);
+          const n8r = b.readUInt32LE(4 + n8q);
+          const o = 4 + n8q + 4 + n8r;
+          variables = b.readUInt32LE(o);
+          domainSize = b.readUInt32LE(o + 8);
+          break;
+        }
+        pos += 12 + size;
+      }
+    }
+  } finally {
+    await fh.close();
+  }
+  const [z, w] = await Promise.all([fs.stat(ZKEY_PATH), fs.stat(WASM_PATH)]);
+  return { protocol: vk.protocol, curve: vk.curve, publicSignals: PUBLIC_SIGNALS, nPublic: vk.nPublic, variables, domainSize, zkeyBytes: z.size, wasmBytes: w.size, treeDepth: MANDATE_TREE_DEPTH, allowlistDepth: ALLOWLIST_DEPTH };
+}

@@ -152,6 +152,7 @@ describe("coordinator", () => {
     await until(async () => (await sessionStatus(tc, p.sessionId)) === 2 && coordinator.order(p.sessionId)?.status === "funded");
     const o = coordinator.order(p.sessionId)!;
     expect(o.hsp_tx).toMatch(/^0x/);
+    expect(coordinator.sessions().find((x) => x.sessionId === p.sessionId.toLowerCase())).toMatchObject({ status: "funded", amount: String(p.amount) });
   });
 
   it("webhooks: bad signature and stale timestamps are rejected; duplicates are ignored", async () => {
