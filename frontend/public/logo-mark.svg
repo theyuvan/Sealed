@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Sealed">
+  <defs>
+    <linearGradient id="g" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2f6bff"/>
+      <stop offset="1" stop-color="#0035b8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="18" fill="url(#g)"/>
+  <!-- shackle: the lock closing over the S -->
+  <path d="M22 27v-5a10 10 0 0 1 20 0v5" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="4" stroke-linecap="round"/>
+  <!-- seal body -->
+  <rect x="17" y="27" width="30" height="24" rx="7" fill="#fff"/>
+  <!-- S cut out of the body -->
+  <path d="M39 33.5c-1.6-1.6-4-2-6.5-2-3 0-5 1.4-5 3.4 0 2.3 2.2 3 5.2 3.7 3.2.8 5.8 1.5 5.8 4.2 0 2.2-2.2 3.6-5.8 3.6-2.7 0-5.2-.8-6.9-2.4" fill="none" stroke="#0049e6" stroke-width="3.4" stroke-linecap="round"/>
+</svg>
