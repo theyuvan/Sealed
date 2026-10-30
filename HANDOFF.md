@@ -48,7 +48,8 @@ Without any of that, `npm run dev` runs the entire flow locally on anvil with th
 4. Rotate the Gemini key that was shared in chat; the free tier allows 20 requests a day per model and one purchase uses about 13 to 15, so use a funded key for the demo.
 5. Run the two live-LLM tests when quota allows.
 6. Run the frontend against the testnet stack (`npm start`, `npm run web`), set `DATA_ASSETS` to real tokenized-asset contracts, record the demo (README section 13).
-7. If HSP never allowlists in time: demo on the local stand-in and say so on screen; the submission is weaker without real HSP.
+7. Rehearse the recording with `npm run demo` (terminal) and the frontend (`npm run web`).
+8. If HSP never allowlists in time: demo on the local stand-in and say so on screen; the submission is weaker without real HSP.
 
 ## Known limits (be honest about these in the submission)
 

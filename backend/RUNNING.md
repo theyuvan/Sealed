@@ -73,6 +73,10 @@ Notes from the testnet runs:
 - Gemini free tier: 20 requests/day per model, and one purchase is about 13–15 requests. Change `GEMINI_MODEL` or enable billing when it runs out.
 - `npm run e2e:local` runs against the local stack from `npm run dev` (`.env.local`).
 
+## Terminal demo (README section 13)
+
+`npm run demo` (add `-- --fast` to skip the pauses, `-- --local` for the `npm run dev` stack) plays the 3-minute script against the running services: seal a mandate, show the agent token refused on the mandate routes, print the adversary chart, run an honest purchase through the buyer agent, then print the receipt and re-verify the spend proof (valid, and rejected with the amount changed). Everything printed comes from the live services. It does not run the rogue-seller attacks; those are `npm run test:e2e`.
+
 ## Frontend (owner dashboard)
 
 `frontend/` is a Next.js app wired to the live services (see `frontend/README.md`). With the stack running (`npm run dev`, or `npm start` on testnet):

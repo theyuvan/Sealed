@@ -20,6 +20,8 @@
     "fund": "node --import tsx scripts/fund.ts",
     "buyer:mcp": "tsx services/buyer-agent/src/mcp-main.ts",
     "web": "npm --prefix ../frontend run dev",
+    "demo": "node --import tsx scripts/demo.ts",
+    "demo:local": "node --import tsx scripts/demo.ts --local",
     "hsp:check": "node --import tsx scripts/hsp-mcp-check.ts",
     "hsp:check:api": "node --import tsx scripts/hsp-check.ts",
     "e2e": "node --import tsx scripts/e2e.ts",
