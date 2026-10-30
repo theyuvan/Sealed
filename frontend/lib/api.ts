@@ -35,7 +35,9 @@ export interface Overview {
   hspMode: string;
   decimals: number;
   probeLimit: number;
-  services: { vault: boolean; coordinator: boolean; sellers: number };
+  services: { vault: boolean; coordinator: boolean; sellers: number; buyer: boolean };
+  /** the buyer agent's LLM provider, or null when none is configured */
+  llm: string | null;
   sellers: { url: string; name: string; address: string; services: { id: string; category: string; categoryId: number; calls: number; listPrice: string; description: string }[]; notice?: string }[];
   meta: {
     chainId: number;

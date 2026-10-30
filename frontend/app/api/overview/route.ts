@@ -1,4 +1,4 @@
-import { config, coordinator, jsonError, seller, vault } from "@/lib/backend";
+import { buyer, config, coordinator, jsonError, seller, vault } from "@/lib/backend";
 
 export const dynamic = "force-dynamic";
 
@@ -11,13 +11,14 @@ const up = (p: Promise<unknown>) =>
 /** Everything the dashboard needs in one call: service health, sellers, chain and circuit facts, masked mandate status. */
 export async function GET() {
   try {
-    const [vaultUp, coordUp, cards, meta, status, sessions] = await Promise.all([
+    const [vaultUp, coordUp, cards, meta, status, sessions, buyerHealth] = await Promise.all([
       up(fetch(`${config.vaultUrl}/health`, { signal: AbortSignal.timeout(3000) })),
       up(coordinator("/health")),
       Promise.all(config.sellerUrls.map((url) => seller<Record<string, unknown>>(url, "/.well-known/agent.json").then((c) => ({ url, ...c }), () => null))),
       vault<Record<string, unknown>>("/meta").catch(() => null),
       vault<{ active: boolean; evaluations?: number; commitment?: string; expiry?: string; pendingSpend?: boolean }>("/mandate/status").catch(() => null),
       coordinator<unknown[]>("/sessions").catch(() => []),
+      buyer<{ llm: string | null }>("/health").catch(() => null),
     ]);
     const sellers = cards.filter(Boolean);
     return Response.json({
@@ -26,7 +27,8 @@ export async function GET() {
       hspMode: config.hspMode,
       decimals: config.decimals,
       probeLimit: config.probeLimit,
-      services: { vault: vaultUp, coordinator: coordUp, sellers: sellers.length },
+      services: { vault: vaultUp, coordinator: coordUp, sellers: sellers.length, buyer: buyerHealth !== null },
+      llm: buyerHealth?.llm ?? null,
       sellers,
       meta,
       // the values of the mandate (remaining budget, per-deal cap) are not in this response: see /api/mandate?reveal=1

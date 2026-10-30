@@ -13,7 +13,7 @@ export function buildBuyerServer(toolsConfig: BuyerToolsConfig, o: { llm?: LlmCo
   const app = Fastify({ logger: o.logger ?? false });
   const runs = new Map<string, unknown>();
 
-  app.get("/health", async () => ({ ok: true }));
+  app.get("/health", async () => ({ ok: true, llm: o.llm?.provider ?? null }));
 
   // Runs can take minutes (chain confirmations, LLM rate limits): start in the background, poll GET /runs/:id.
   app.post("/run", async (req) => {
