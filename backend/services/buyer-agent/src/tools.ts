@@ -17,6 +17,7 @@ import {
   type Deployment,
   type HspConfig,
   HspClient,
+  HspMcpClient,
   type SignedQuote,
   buildPaymentMandate,
   categoryId,
@@ -37,6 +38,8 @@ export interface BuyerToolsConfig {
   wallet: PrivateKeyAccount;
   vault: VaultAgentClient;
   hsp: Pick<HspConfig, "baseUrl" | "payerBaseUrl" | "paths" | "x402Method" | "jwtAudience"> & Partial<HspConfig>;
+  /** HSP Agentic Payment client; built from hsp.mcpUrl when hsp.mode is "mcp" (tests inject one). */
+  hspMcp?: HspMcpClient;
   coordinatorUrl: string;
   sellerUrls: string[];
   decimals?: number;
@@ -97,6 +100,7 @@ export class BuyerTools {
   readonly pub: PublicClient;
   private readonly walletClient: WalletClient;
   private readonly hsp: HspClient;
+  private readonly mcp?: HspMcpClient;
   private readonly quotes = new Map<string, QuoteRecord>();
   private readonly negotiations = new Map<string, string>(); // `${seller}|${service}|${rfq}` -> vault negotiation id
   private readonly accepted = new Map<string, string>(); // quote id -> vault negotiation id
@@ -109,6 +113,7 @@ export class BuyerTools {
     this.pub = createPublicClient({ chain, transport: rpcTransport(cfg.rpcUrl) }) as PublicClient;
     this.walletClient = createWalletClient({ chain, transport: rpcTransport(cfg.rpcUrl), account: cfg.wallet });
     this.hsp = new HspClient({ appKey: "", appSecret: "", merchantPrivateKey: "", merchantName: "", webhookSecret: "", headers: {} as never, networkName: "", coin: "", webhookEventIdField: "", successStatuses: [], failedStatuses: [], localStandIn: false, ...cfg.hsp });
+    if (cfg.hsp.mode === "mcp") this.mcp = cfg.hspMcp ?? new HspMcpClient({ url: cfg.hsp.mcpUrl, merchantName: cfg.hsp.merchantName ?? "Sealed" });
   }
 
   private get decimals() {
@@ -261,6 +266,19 @@ export class BuyerTools {
 
     const order = (await this.sellerPost(q.sellerUrl, "/hsp/order", { sessionId })) as { flowId?: string };
     if (!order.flowId) return { error: "seller returned no HSP order", session_id: sessionId, funds_moved: false };
+    if (this.mcp) {
+      // the flow must be the order our own coordinator made for this session, not one the seller picked
+      const mine = (await fetch(`${this.cfg.coordinatorUrl}/hsp/orders/${sessionId}`).then((r) => r.json()).catch(() => ({}))) as { flowId?: string };
+      if (!mine.flowId || mine.flowId !== order.flowId) return { error: "refused to pay: the seller's HSP order is not the coordinator's order for this session", session_id: sessionId, funds_moved: false };
+      try {
+        // prepare -> check the exact authorization (escrow payee, amount = cap, no fees) -> sign -> finalize -> submit
+        await this.mcp.pay(order.flowId, this.cfg.wallet, { chainId: this.cfg.chainId, token: this.cfg.deployment.token, escrow: this.cfg.deployment.escrow, amount, maxValiditySeconds: 1800 });
+      } catch (e) {
+        const msg = (e as Error).message;
+        return { error: `HSP payment failed: ${msg}`, session_id: sessionId, funds_moved: msg.startsWith("refused to sign") ? false : "unknown, query the order before retrying" };
+      }
+      return this.waitFunded(sessionId, amount, proof.calls, hash);
+    }
     const hspCart = await this.hsp.cartByFlow(order.flowId);
     const bad = checkCartForSession(hspCart, {
       chainId: this.cfg.chainId,
@@ -285,11 +303,14 @@ export class BuyerTools {
       validBefore: block.timestamp + 600n,
     });
     await this.hsp.payMandate(order.flowId, pm);
+    return this.waitFunded(sessionId, amount, proof.calls, hash);
+  }
 
+  private async waitFunded(sessionId: Hex, amount: bigint, calls: number, openTx: Hex): Promise<ToolResult> {
     const deadline = Date.now() + (this.cfg.fundingTimeoutMs ?? 120_000);
     while (Date.now() < deadline) {
       const s = await this.pub.readContract({ address: this.cfg.deployment.escrow, abi: sessionEscrowAbi, functionName: "getSession", args: [sessionId] });
-      if (s.status === 2) return { session_id: sessionId, status: "funded", calls: proof.calls, price_per_call: this.fmt(amount / BigInt(proof.calls)), open_tx: hash };
+      if (s.status === 2) return { session_id: sessionId, status: "funded", calls, price_per_call: this.fmt(amount / BigInt(calls)), open_tx: openTx };
       await new Promise((r) => setTimeout(r, 500));
     }
     return { error: "session not funded in time", session_id: sessionId };

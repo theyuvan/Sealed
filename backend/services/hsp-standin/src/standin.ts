@@ -21,6 +21,8 @@ import {
   verifyEs256k,
   verifyHs256, rpcTransport } from "@sealed/core";
 
+export * from "./mcp-standin.ts";
+
 /**
  * "HSP local stand-in" — DEVELOPMENT ONLY. Not operated by HashKey.
  *

@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { BACKEND_ROOT, accountFromEnv, envInt, hspConfigFromEnv, hspTokenError, loadDeployment, loadEnv, requireEnv } from "@sealed/core";
+import { BACKEND_ROOT, HspMcpClient, accountFromEnv, chainTokenProblems, envInt, findChainToken, hspConfigFromEnv, hspTokenError, loadDeployment, loadEnv, requireEnv } from "@sealed/core";
 import { Coordinator } from "./coordinator.ts";
 import { buildCoordinatorServer } from "./server.ts";
 
@@ -7,7 +7,18 @@ const env = loadEnv();
 const chainId = envInt("CHAIN_ID", 31337);
 const hsp = hspConfigFromEnv(env, chainId);
 const deployment = loadDeployment(chainId);
-if (!hsp.localStandIn) {
+let hspMcp: HspMcpClient | undefined;
+if (hsp.mode === "mcp") {
+  // HSP Agentic Payment: get_chain_config is the authority for network, coin, decimals and protocol
+  hspMcp = new HspMcpClient({ url: hsp.mcpUrl, merchantName: hsp.merchantName });
+  if (!hsp.localStandIn) {
+    const t = findChainToken(await hspMcp.getChainConfig(), chainId, deployment.token);
+    const problems = chainTokenProblems(t, { decimals: envInt("TOKEN_DECIMALS", 6) });
+    if (problems.length) throw new Error(`refusing to start against real HSP: ${problems.join("; ")}`);
+    if (t!.network && !process.env.HSP_NETWORK_NAME) hsp.networkName = t!.network;
+    if (t!.symbol && !process.env.HSP_COIN) hsp.coin = t!.symbol;
+  }
+} else if (!hsp.localStandIn) {
   // real HSP settles only its registered tokens, and Sealed's escrow needs EIP-3009: fail at startup, not on the first order
   const tokenProblem = hspTokenError(chainId, deployment.token, hsp.coin);
   if (tokenProblem) throw new Error(`refusing to start against real HSP: ${tokenProblem}`);

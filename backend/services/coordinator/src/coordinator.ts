@@ -17,6 +17,7 @@ import {
   type HspConfig,
   type HspPaymentRecord,
   HspClient,
+  HspMcpClient,
   buildSessionCartContents,
   chainFor,
   eip3009Abi,
@@ -40,6 +41,8 @@ export interface CoordinatorConfig {
   deployment: Deployment;
   account: Account;
   hsp: HspConfig;
+  /** HSP Agentic Payment client; built from hsp.mcpUrl when hsp.mode is "mcp" (tests inject one). */
+  hspMcp?: HspMcpClient;
   decimals: number;
   dbPath: string;
   cartTtlSeconds?: number;
@@ -105,6 +108,7 @@ export class Coordinator {
   readonly pub: PublicClient;
   readonly wallet: WalletClient;
   readonly hsp: HspClient;
+  readonly mcp?: HspMcpClient;
   private confirming = new Map<string, Promise<unknown>>();
 
   constructor(readonly cfg: CoordinatorConfig) {
@@ -113,6 +117,7 @@ export class Coordinator {
     this.pub = createPublicClient({ chain, transport: rpcTransport(cfg.rpcUrl) }) as PublicClient;
     this.wallet = createWalletClient({ chain, transport: rpcTransport(cfg.rpcUrl), account: cfg.account });
     this.hsp = new HspClient(cfg.hsp);
+    if (cfg.hsp.mode === "mcp") this.mcp = cfg.hspMcp ?? new HspMcpClient({ url: cfg.hsp.mcpUrl, merchantName: cfg.hsp.merchantName });
   }
 
   private log(msg: string, data?: Record<string, unknown>) {
@@ -155,14 +160,16 @@ export class Coordinator {
       expiresAt: new Date(Date.now() + (this.cfg.cartTtlSeconds ?? 1800) * 1000),
     });
     // HSP answers a malformed cart with 10001 and creates nothing; catch it here with a readable reason
-    const problems = validateCartContents(contents, { checkTokens: !this.cfg.hsp.localStandIn });
+    const problems = validateCartContents(contents, { checkTokens: !this.cfg.hsp.localStandIn && !this.mcp });
     if (problems.length) throw new CoordinatorError(`cart rejected before submission: ${problems.join("; ")}`, 500);
-    const cart = {
-      contents,
-      merchant_authorization: merchantAuthorization(contents, { merchantName: this.cfg.hsp.merchantName, audience: this.cfg.hsp.jwtAudience, key: this.hsp.merchantKey }),
-    };
     const fromBlock = await this.pub.getBlockNumber({ cacheTime: 0 });
-    const r = await this.hsp.createOrder(cart);
+    // MCP route: HSP signs the cart for us (no merchant_authorization) and applies pay_to; API route: we sign it
+    const r = this.mcp
+      ? await this.mcp.createOrder(contents, this.cfg.deployment.escrow)
+      : await this.hsp.createOrder({
+          contents,
+          merchant_authorization: merchantAuthorization(contents, { merchantName: this.cfg.hsp.merchantName, audience: this.cfg.hsp.jwtAudience, key: this.hsp.merchantKey }),
+        });
     const row: OrderRow = {
       session_id: sessionId.toLowerCase(),
       seller: s.seller,
@@ -224,7 +231,11 @@ export class Coordinator {
     const rows = this.db.prepare("SELECT * FROM orders WHERE status IN ('created', 'paid')").all() as unknown as OrderRow[];
     for (const o of rows) {
       try {
-        const records = await this.hsp.payments({ cart_mandate_id: o.cart_mandate_id });
+        const records = this.mcp
+          ? o.flow_id
+            ? [await this.mcp.payment(o.flow_id, { cartMandateId: o.cart_mandate_id, paymentRequestId: o.payment_request_id })]
+            : []
+          : await this.hsp.payments({ cart_mandate_id: o.cart_mandate_id });
         const rec = records.find((r) => hspStatusClass(this.cfg.hsp, r.status) === "success");
         if (rec) await this.confirm(o.session_id as Hex, rec);
         else if (records.some((r) => hspStatusClass(this.cfg.hsp, r.status) === "failed")) this.db.prepare("UPDATE orders SET status = 'failed' WHERE session_id = ?").run(o.session_id);
@@ -268,14 +279,28 @@ export class Coordinator {
       if (billedUnits !== cap) return { funded: false, reason: `HSP pay_amount ${billed} differs from the session cap (fees added?)` };
     }
 
-    // 2. the exact EIP-3009 transfer is on chain: buyer -> escrow, value = cap, nonce = sessionId
-    const used = await this.pub.readContract({ address: s.token, abi: eip3009Abi, functionName: "authorizationState", args: [s.buyer, sessionId] });
-    if (!used) return { funded: false, reason: "authorization not used on chain yet" };
-    const txHash = await this.findTransferTx(sessionId, s.token, s.buyer, BigInt(o.from_block), rec.tx_signature as Hex | undefined);
+    // 2. the exact EIP-3009 transfer is on chain: buyer -> escrow, value = cap. API route: nonce = sessionId.
+    // MCP route: HSP picks the nonce, so the transaction HSP reports must be one that no other session has used.
+    let txHash: Hex | null;
+    if (this.mcp) {
+      if (rec.attribution_verified !== true) return { funded: false, reason: "HSP has not verified the team attribution" };
+      const hinted = rec.tx_signature;
+      if (!hinted || !/^0x[0-9a-fA-F]{64}$/.test(hinted)) return { funded: false, reason: "HSP reported no transaction hash yet" };
+      const taken = this.db.prepare("SELECT session_id FROM orders WHERE hsp_tx = ? AND session_id != ?").get(hinted.toLowerCase(), o.session_id);
+      if (taken) return { funded: false, reason: "this transaction already funded another session" };
+      txHash = hinted.toLowerCase() as Hex;
+      // claim it now (no await since the check above), so two sessions can never both pass with one transfer
+      this.db.prepare("UPDATE orders SET hsp_tx = ? WHERE session_id = ?").run(txHash, o.session_id);
+    } else {
+      const used = await this.pub.readContract({ address: s.token, abi: eip3009Abi, functionName: "authorizationState", args: [s.buyer, sessionId] });
+      if (!used) return { funded: false, reason: "authorization not used on chain yet" };
+      txHash = await this.findTransferTx(sessionId, s.token, s.buyer, BigInt(o.from_block), rec.tx_signature as Hex | undefined);
+    }
     if (!txHash) return { funded: false, reason: "transfer not found yet" };
-    const rc = await this.pub.getTransactionReceipt({ hash: txHash });
+    const rc = await this.pub.getTransactionReceipt({ hash: txHash }).catch(() => null);
+    if (!rc) return { funded: false, reason: "transaction not mined yet" };
     const logs = parseEventLogs({ abi: eip3009Abi, logs: rc.logs.filter((l) => isAddressEqual(l.address, s.token)) });
-    const auth = logs.find((l) => l.eventName === "AuthorizationUsed" && isAddressEqual(l.args.authorizer as Address, s.buyer) && l.args.nonce === sessionId);
+    const auth = logs.find((l) => l.eventName === "AuthorizationUsed" && isAddressEqual(l.args.authorizer as Address, s.buyer) && (this.mcp !== undefined || l.args.nonce === sessionId));
     const transfer = logs.find(
       (l) => l.eventName === "Transfer" && isAddressEqual(l.args.from as Address, s.buyer) && isAddressEqual(l.args.to as Address, this.cfg.deployment.escrow) && l.args.value === cap,
     );
@@ -291,7 +316,7 @@ export class Coordinator {
     const fundTx = await this.wallet.writeContract({
       address: this.cfg.deployment.escrow,
       abi: sessionEscrowAbi,
-      functionName: "markFunded",
+      functionName: this.mcp ? "markFundedByTransfer" : "markFunded", // the gateway picks the nonce on the MCP route
       args: [sessionId, o.hsp_order_id as Hex],
       chain: this.wallet.chain,
       account: this.cfg.account,

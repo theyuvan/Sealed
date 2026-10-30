@@ -184,3 +184,42 @@ describe("buyer agent against the full stack", () => {
     expect(hasNumber(stack.mandate.max)).toBe(false);
   }, 900_000);
 });
+
+describe("paying through HSP Agentic Payment (MCP tools)", () => {
+  let stack: Stack;
+  let feeStack: Stack;
+  beforeAll(async () => {
+    stack = await startStack({ hspMode: "mcp" });
+    feeStack = await startStack({ hspMode: "mcp", mcpFeeUnits: 1000n });
+  });
+  afterAll(async () => {
+    await stack?.stop();
+    await feeStack?.stop();
+    await shutdownProver();
+  });
+
+  it("funds a session through create_order -> prepare -> sign -> finalize -> submit, with a gateway-chosen nonce, and settles", async () => {
+    const r = await runScripted(stack.buyerTools(), { sellerUrl: stack.urls.honest1, serviceId: "nav-snapshot", calls: 1 });
+    expect(r.outcome).toBe("closed");
+    const order = stack.coordinator.order(r.sessionId as `0x${string}`)!;
+    expect(order.status).toBe("funded");
+    expect(order.hsp_tx).toMatch(/^0x[0-9a-f]{64}$/);
+    const hsp = [...stack.mcpStandIn!.orders.values()];
+    expect(hsp).toHaveLength(1);
+    expect(hsp[0]!.status).toBe("payment-finalized");
+    expect(hsp[0]!.merchantName).toBe("Sealed");
+    // the gateway's nonce is not the session id: the coordinator verified the transfer by transaction instead
+    expect(hsp[0]!.quote!.typed).toMatchObject({ message: { to: stack.tc.deployment.escrow } });
+    expect((hsp[0]!.quote!.typed as { message: { nonce: string } }).message.nonce).not.toBe(r.sessionId);
+  }, 180_000);
+
+  it("refuses to sign when the gateway adds a fee on top of the session cap", async () => {
+    const tools = feeStack.buyerTools();
+    const r = await runScripted(tools, { sellerUrl: feeStack.urls.honest1, serviceId: "nav-snapshot", calls: 1 });
+    expect(r.outcome).toBe("open-failed");
+    const failed = r.steps.find((s) => s.error);
+    expect(String(failed!.error)).toMatch(/refused to sign.*fees added/);
+    expect(failed!.funds_moved).toBe(false);
+    expect([...feeStack.mcpStandIn!.orders.values()].every((o) => o.status === "payment-required")).toBe(true); // nothing was submitted
+  }, 180_000);
+});

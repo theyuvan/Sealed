@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { createPublicKey } from "node:crypto";
 import { BACKEND_ROOT, accountFromEnv, envInt, hspConfigFromEnv, loadDeployment, loadEnv, merchantKey, requireEnv } from "@sealed/core";
-import { STANDIN_LABEL, buildStandIn, type StandInMerchant } from "./standin.ts";
+import { STANDIN_LABEL, buildMcpStandIn, buildStandIn, type StandInMerchant } from "./standin.ts";
 
 const env = loadEnv();
 if (env.HSP_LOCAL_STANDIN !== "1") {
@@ -10,6 +10,14 @@ if (env.HSP_LOCAL_STANDIN !== "1") {
 }
 const chainId = envInt("CHAIN_ID", 31337);
 const hsp = hspConfigFromEnv(env, chainId); // throws on mainnet
+if (hsp.mode === "mcp") {
+  // HSP Agentic Payment flavour: the eight MCP tools over Streamable HTTP (no credentials, polling)
+  const mcpPort = envInt("HSP_STANDIN_PORT", 7301);
+  const mcp = buildMcpStandIn({ chainId, rpcUrl: requireEnv("HSK_RPC_URL"), token: loadDeployment(chainId).token, decimals: envInt("TOKEN_DECIMALS", 6), relayer: accountFromEnv("HSP_STANDIN_RELAYER_PRIVATE_KEY"), networkName: hsp.networkName, coin: hsp.coin });
+  await mcp.listen(mcpPort);
+  console.log(`${STANDIN_LABEL} (MCP tools) listening on :${mcpPort} (development only, not HashKey)`);
+  await new Promise(() => undefined);
+}
 const merchants: StandInMerchant[] = [
   {
     name: hsp.merchantName,

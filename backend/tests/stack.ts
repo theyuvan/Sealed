@@ -3,9 +3,9 @@
 import { createPublicKey } from "node:crypto";
 import { type Address } from "viem";
 import { generatePrivateKey, type PrivateKeyAccount } from "viem/accounts";
-import { CATEGORIES, type HspConfig, HSP_DEFAULT_HEADERS, HSP_DEFAULT_PATHS, generateAuditorKey, merchantKey, seededRng } from "@sealed/core";
+import { CATEGORIES, HspMcpClient, type HspConfig, HSP_DEFAULT_HEADERS, HSP_DEFAULT_PATHS, generateAuditorKey, merchantKey, seededRng } from "@sealed/core";
 import { Vault, buildVaultServer, type VaultConfig } from "@sealed/vault";
-import { buildStandIn } from "@sealed/hsp-standin";
+import { buildMcpStandIn, buildStandIn } from "@sealed/hsp-standin";
 import { Coordinator, buildCoordinatorServer } from "@sealed/coordinator";
 import { buildSeller, pricedCatalog, type RogueOptions } from "@sealed/sellers";
 import { BuyerTools, VaultAgentClient } from "@sealed/buyer-agent";
@@ -19,6 +19,10 @@ export interface StackOptions {
   vault?: Partial<VaultConfig>;
   rogue?: Omit<RogueOptions, "cartSwap"> & { list?: bigint; reserve?: bigint; cartSwap?: boolean };
   mandate?: { max?: bigint; cap?: bigint };
+  /** "mcp": coordinator and buyer pay through the HSP Agentic Payment tools (stand-in), not the Merchant API */
+  hspMode?: "api" | "mcp";
+  /** mcp mode: fee the stand-in gateway adds on top of the order amount */
+  mcpFeeUnits?: bigint;
 }
 
 export interface Stack {
@@ -28,6 +32,7 @@ export interface Stack {
   coordinator: Coordinator;
   coordinatorUrl: string;
   hsp: HspConfig;
+  mcpStandIn?: ReturnType<typeof buildMcpStandIn>;
   urls: { honest1: string; honest2: string; rogue: string };
   sellers: { honest1: ReturnType<typeof buildSeller>; honest2: ReturnType<typeof buildSeller>; rogue: ReturnType<typeof buildSeller> };
   mandate: { max: bigint; cap: bigint };
@@ -110,8 +115,14 @@ export async function startStack(o: StackOptions = {}): Promise<Stack> {
   await standin.listen({ host: "127.0.0.1", port: standinPort });
   closers.push(standin);
 
+  // HSP Agentic Payment route: the eight MCP tools over memory, the gateway picks its own nonce
+  const mcp = o.hspMode === "mcp";
+  const mcpStandIn = mcp ? buildMcpStandIn({ chainId: 31337, rpcUrl: tc.rpcUrl, token: tc.deployment.token, decimals: 6, relayer: tc.keys.relayer, feeUnits: o.mcpFeeUnits }) : undefined;
+  const coordHsp: HspConfig = mcp ? { ...hsp, mode: "mcp", successStatuses: ["payment-safe", "payment-finalized"] } : hsp;
+  const mcpClient = () => new HspMcpClient({ transport: () => mcpStandIn!.connect(), merchantName: "Sealed" });
+
   // Coordinator (webhooks + a background poller)
-  const coordinator = new Coordinator({ chainId: 31337, rpcUrl: tc.rpcUrl, deployment: tc.deployment, account: tc.keys.coordinator, hsp, decimals: 6, dbPath: ":memory:" });
+  const coordinator = new Coordinator({ chainId: 31337, rpcUrl: tc.rpcUrl, deployment: tc.deployment, account: tc.keys.coordinator, hsp: coordHsp, hspMcp: mcp ? mcpClient() : undefined, decimals: 6, dbPath: ":memory:" });
   const capp = buildCoordinatorServer(coordinator);
   await capp.listen({ host: "127.0.0.1", port: coordPort });
   closers.push(capp);
@@ -162,6 +173,7 @@ export async function startStack(o: StackOptions = {}): Promise<Stack> {
     coordinator,
     coordinatorUrl,
     hsp,
+    mcpStandIn,
     urls: { honest1: h1.url, honest2: h2.url, rogue: rg.url },
     sellers: { honest1: h1.app, honest2: h2.app, rogue: rg.app },
     mandate,
@@ -172,7 +184,8 @@ export async function startStack(o: StackOptions = {}): Promise<Stack> {
         deployment: tc.deployment,
         wallet: tc.keys.buyer,
         vault: new VaultAgentClient(vaultUrl, AGENT_TOKEN),
-        hsp: { baseUrl: standinUrl, payerBaseUrl: standinUrl, paths: HSP_DEFAULT_PATHS, x402Method: hsp.x402Method, jwtAudience: hsp.jwtAudience },
+        hsp: { baseUrl: standinUrl, payerBaseUrl: standinUrl, paths: HSP_DEFAULT_PATHS, x402Method: hsp.x402Method, jwtAudience: hsp.jwtAudience, ...(mcp ? { mode: "mcp" as const, merchantName: "Sealed" } : {}) },
+        hspMcp: mcp ? mcpClient() : undefined,
         coordinatorUrl,
         sellerUrls: [h1.url, h2.url, rg.url],
         fundingTimeoutMs: 30_000,

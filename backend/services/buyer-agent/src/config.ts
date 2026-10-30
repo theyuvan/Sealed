@@ -11,7 +11,8 @@ export function buyerToolsConfigFromEnv(env: NodeJS.ProcessEnv = loadEnv()): Buy
   const wallet = accountFromEnv("BUYER_WALLET_PRIVATE_KEY");
   const agentToken = requireEnv("VAULT_AGENT_TOKEN");
   const standin = env.HSP_LOCAL_STANDIN === "1";
-  const hspBase = standin ? (env.HSP_STANDIN_URL ?? "http://127.0.0.1:7301") : requireEnv("HSP_PAYER_BASE_URL");
+  const mcp = env.HSP_MODE === "mcp" || (env.HSP_MODE !== "api" && !standin);
+  const hspBase = standin ? (env.HSP_STANDIN_URL ?? "http://127.0.0.1:7301") : mcp ? "" : requireEnv("HSP_PAYER_BASE_URL");
   return {
     chainId,
     rpcUrl: requireEnv("HSK_RPC_URL"),
@@ -19,6 +20,7 @@ export function buyerToolsConfigFromEnv(env: NodeJS.ProcessEnv = loadEnv()): Buy
     wallet,
     vault: new VaultAgentClient(env.VAULT_URL ?? `http://127.0.0.1:${envInt("VAULT_PORT", 7001)}`, agentToken),
     hsp: {
+      ...(mcp ? { mode: "mcp" as const, mcpUrl: env.HSP_MCP_URL ?? (standin ? hspBase : "https://mcp-qa.hashkeymerchant.com/"), merchantName: env.HSP_MERCHANT_NAME ?? "Sealed" } : {}),
       baseUrl: hspBase,
       payerBaseUrl: hspBase,
       paths: {
