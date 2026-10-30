@@ -79,6 +79,7 @@ Honest scope note: F4 **reduces** behavioral leakage, it does not eliminate it. 
 
 ```
 sealed/
+├── frontend/                  Next.js owner dashboard, wired to the live services through server-side route handlers
 ├── circuits/                  Circom spend circuit
 │   ├── spend.circom
 │   ├── lib/merkle.circom

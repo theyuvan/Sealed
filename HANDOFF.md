@@ -14,7 +14,7 @@ Repo: `theyuvan/Sealed` (private). Everything below is in `main`.
 | HSP Agentic Payment client (`packages/core/src/hsp-mcp.ts`) | Done, tested against a stand-in that mimics the eight tools. **Never run against real HSP** |
 | Adversary evaluator + chart | Done |
 | Testnet (chain 133) deployment with official USDC | Done: escrow `0xA6b35F222f6efbA4441c298858Dc68f5e7B53bef`, token `0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6` (`contracts/deployments/133.json`) |
-| Frontend | Not started (left to the team) |
+| Frontend (`frontend/`, merged from `feat/frontend`) | Done and wired to the live backend: dashboard (seal/rotate/revoke), real negotiation runs, receipts with the spend proof (public signals, re-verify), attacks chart. Run: `npm run dev` then `npm run web` in `backend/` |
 
 Tests: `cd backend && NODE_OPTIONS=--experimental-sqlite npm test` (Node 22.12 needs that flag for `node:sqlite`; Foundry is installed by `npm run tools`).
 
@@ -47,7 +47,7 @@ Without any of that, `npm run dev` runs the entire flow locally on anvil with th
 3. `npm run fund` (balances), top up gas if needed, then `npm start` and `npm run e2e` for one real purchase. Expect to fix small things: the shapes of `get_chain_config`, `get_order` and `query_payment` results are parsed tolerantly but were never seen.
 4. Rotate the Gemini key that was shared in chat; the free tier allows 20 requests a day per model and one purchase uses about 13 to 15, so use a funded key for the demo.
 5. Run the two live-LLM tests when quota allows.
-6. Build the frontend (do not rely on the stand-in for the demo), set `DATA_ASSETS` to real tokenized-asset contracts, record the demo (README section 13).
+6. Run the frontend against the testnet stack (`npm start`, `npm run web`), set `DATA_ASSETS` to real tokenized-asset contracts, record the demo (README section 13).
 7. If HSP never allowlists in time: demo on the local stand-in and say so on screen; the submission is weaker without real HSP.
 
 ## Known limits (be honest about these in the submission)

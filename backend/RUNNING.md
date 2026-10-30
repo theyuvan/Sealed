@@ -73,6 +73,16 @@ Notes from the testnet runs:
 - Gemini free tier: 20 requests/day per model, and one purchase is about 13–15 requests. Change `GEMINI_MODEL` or enable billing when it runs out.
 - `npm run e2e:local` runs against the local stack from `npm run dev` (`.env.local`).
 
+## Frontend (owner dashboard)
+
+`frontend/` is a Next.js app wired to the live services (see `frontend/README.md`). With the stack running (`npm run dev`, or `npm start` on testnet):
+
+```bash
+npm run web      # http://localhost:3000  (runs the frontend dev server; first time: cd ../frontend && npm install)
+```
+
+Its server-side route handlers hold the Vault admin token and call the Vault, buyer agent, coordinator and sellers; the browser never sees a token. Pages: dashboard (seal, rotate, revoke, probe limits, circuit facts, spend proofs), negotiate (a real run, step by step), receipts (on-chain links, the proof's public signals, re-verify), attacks (the adversary report). The Vault gained admin-only `GET /meta`, `GET /proofs` and `POST /circuit/verify`, and the coordinator `GET /sessions`, for this.
+
 ## MCP server for the buyer tools
 
 `npm run buyer:mcp` serves the buyer's seven tools (`discover_sellers`, `request_quote`, `propose`, `open_session`, `call_service`, `check_delivery`, `close_session`) over MCP on stdio, so any MCP client can act as the buyer. It uses the same `BuyerTools` code as the built-in LLM agent and the same tool schemas (`TOOL_DEFS`), so there is nothing extra to keep in sync.
