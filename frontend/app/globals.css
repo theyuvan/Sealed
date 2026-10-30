@@ -33,3 +33,22 @@ body { color: var(--color-ink); background: #fff; font-family: var(--font-sans);
 .input { border: 1px solid var(--color-line); border-radius: 8px; padding: 12px 14px; font-size: 15px; width: 100%; background: #fff; outline: none; }
 .input:focus { border-color: var(--color-blue); box-shadow: 0 0 0 3px rgba(0,82,255,.15); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* Hero card motion */
+@keyframes float { 0%,100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-14px) rotate(1deg); } }
+@keyframes rise { from { opacity: 0; transform: translateY(24px) scale(.96); } to { opacity: 1; transform: none; } }
+@keyframes draw { from { stroke-dashoffset: 400; } to { stroke-dashoffset: 0; } }
+@keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+@keyframes drift { 0%,100% { transform: translate(0,0); } 50% { transform: translate(20px,-16px); } }
+@keyframes blink-mask { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+.anim-rise { animation: rise .8s cubic-bezier(.2,.8,.2,1) both; }
+.anim-float { animation: float 6s ease-in-out infinite; }
+.anim-draw { stroke-dasharray: 400; animation: draw 2.4s ease-out .5s both; }
+.anim-pulse { animation: pulse-dot 1.6s ease-in-out infinite; }
+.anim-drift { animation: drift 9s ease-in-out infinite; }
+.anim-mask { animation: blink-mask 2.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .anim-rise, .anim-float, .anim-draw, .anim-pulse, .anim-drift, .anim-mask { animation: none; } }
+
+/* Editorial serif headline with an italic accent word */
+.headline { font-family: var(--font-serif), Georgia, serif; font-weight: 400; line-height: .95; letter-spacing: -0.03em; }
+.headline em { font-style: italic; color: var(--color-blue); padding-right: .04em; }
