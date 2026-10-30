@@ -233,10 +233,23 @@ contract SessionEscrow is EIP712, Ownable, ReentrancyGuard {
     /// @notice Called by the settlement coordinator once HSP reports the payment and the chain shows
     ///         the EIP-3009 transfer with nonce = sessionId.
     function markFunded(bytes32 sessionId, bytes32 hspOrderId) external onlyCoordinator nonReentrant {
+        _markFunded(sessionId, hspOrderId, true);
+    }
+
+    /// @notice Same as markFunded for gateways that choose the EIP-3009 nonce themselves (HSP Agentic
+    ///         Payment). The escrow can no longer see which authorization paid, so the coordinator
+    ///         alone vouches that the buyer's transfer of exactly the cap arrived (it checks the
+    ///         transaction HSP reports and that no other session used it); the balance check below
+    ///         still requires the tokens to be in the escrow, beyond everything already locked.
+    function markFundedByTransfer(bytes32 sessionId, bytes32 hspOrderId) external onlyCoordinator nonReentrant {
+        _markFunded(sessionId, hspOrderId, false);
+    }
+
+    function _markFunded(bytes32 sessionId, bytes32 hspOrderId, bool requireSessionNonce) internal {
         Session storage s = _sessions[sessionId];
         if (s.status != Status.Opened) revert WrongStatus();
         if (block.timestamp > s.deadline) revert DeadlinePassed();
-        if (!IERC3009(s.token).authorizationState(s.buyer, sessionId)) revert NotAuthorized();
+        if (requireSessionNonce && !IERC3009(s.token).authorizationState(s.buyer, sessionId)) revert NotAuthorized();
         if (IERC20(s.token).balanceOf(address(this)) < locked[s.token] + s.cap) revert InsufficientEscrowBalance();
 
         s.funded = s.cap;

@@ -1,9 +1,9 @@
 {
   "chainId": 133,
   "coordinator": "0xb15e66eBcD7e60E15B5098B72B34aa4CFc0e3608",
-  "deployBlock": 34959357,
-  "escrow": "0xcDb67c0dFfAd967Fe6F5983536D88AdE7b1cbbbc",
-  "registry": "0xccD0A380F5261CF5a2742faC1B29587e990039dd",
-  "token": "0xDFB2c880143a0e858167a5df177E29dfc94E6AB4",
-  "verifier": "0xCfC5D18E76586f042AADe43395c7bD337e2fC542"
+  "deployBlock": 35091418,
+  "escrow": "0xA6b35F222f6efbA4441c298858Dc68f5e7B53bef",
+  "registry": "0x993Fb685BBa629afc48f3fB1EcC565Aee14905E0",
+  "token": "0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6",
+  "verifier": "0x4f2c646F3150AD8126e0f3109f4D2e7ad447D3EB"
 }

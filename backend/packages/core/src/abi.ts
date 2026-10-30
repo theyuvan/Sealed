@@ -836,6 +836,24 @@ export const sessionEscrowAbi = [
   },
   {
     "type": "function",
+    "name": "markFundedByTransfer",
+    "inputs": [
+      {
+        "name": "sessionId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "hspOrderId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "open",
     "inputs": [
       {

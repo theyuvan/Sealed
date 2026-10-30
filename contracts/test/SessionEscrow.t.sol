@@ -146,6 +146,40 @@ contract SessionEscrowTest is Base {
         escrow.markFunded(o.id, bytes32(0));
     }
 
+    function test_markFundedByTransfer_acceptsAnyNonce() public {
+        Opened memory o = _open(10e6);
+        _payViaAuthorization(keccak256("gateway-chosen"), o.cap, address(escrow));
+        vm.prank(coordinator);
+        escrow.markFundedByTransfer(o.id, bytes32(0));
+        assertEq(uint8(escrow.getSession(o.id).status), uint8(SessionEscrow.Status.Funded));
+        assertEq(escrow.locked(address(token)), 10e6);
+    }
+
+    function test_markFundedByTransfer_onlyCoordinator() public {
+        Opened memory o = _open(10e6);
+        _payViaAuthorization(keccak256("gateway-chosen"), o.cap, address(escrow));
+        vm.expectRevert(SessionEscrow.NotCoordinator.selector);
+        escrow.markFundedByTransfer(o.id, bytes32(0));
+    }
+
+    function test_markFundedByTransfer_stillRequiresBalance() public {
+        Opened memory o = _open(10e6);
+        _payViaAuthorization(keccak256("gateway-chosen"), o.cap, makeAddr("elsewhere"));
+        vm.prank(coordinator);
+        vm.expectRevert(SessionEscrow.InsufficientEscrowBalance.selector);
+        escrow.markFundedByTransfer(o.id, bytes32(0));
+    }
+
+    function test_markFundedByTransfer_cannotFundTwice() public {
+        Opened memory o = _open(10e6);
+        _payViaAuthorization(keccak256("gateway-chosen"), o.cap, address(escrow));
+        vm.startPrank(coordinator);
+        escrow.markFundedByTransfer(o.id, bytes32(0));
+        vm.expectRevert(SessionEscrow.WrongStatus.selector);
+        escrow.markFundedByTransfer(o.id, bytes32(0));
+        vm.stopPrank();
+    }
+
     function test_markFunded_requiresBalance() public {
         Opened memory o = _open(10e6);
         // authorization used, but the money went elsewhere
