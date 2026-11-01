@@ -75,7 +75,7 @@ export default function Dashboard() {
                 <Stat label="Expiry" value={<span className="text-xl">{expiry}</span>} />
               </div>
               <button
-                onClick={() => (reveal ? setReveal(null) : act("reveal", async () => { const s = await api<{ remaining: string; perDealCap: string }>("/api/mandate?reveal=1"); setReveal({ remaining: s.remaining, perDealCap: s.perDealCap }); }))}
+                onClick={() => (reveal ? setReveal(null) : (async () => { setMsg(null); try { const s = await api<{ remaining: string; perDealCap: string }>("/api/mandate?reveal=1"); setReveal({ remaining: s.remaining, perDealCap: s.perDealCap }); } catch (e) { setMsg((e as Error).message); } })())}
                 className="mt-6 text-sm font-medium text-blue"
               >
                 {reveal ? "Hide values" : "Reveal values (owner view only)"}
