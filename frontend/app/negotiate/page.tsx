@@ -94,6 +94,9 @@ export default function Negotiate() {
   const opened = steps.find((s) => s.tool === "open_session" && s.output.session_id);
   const sessionId = (run?.sessionId ?? opened?.output.session_id) as string | undefined;
   const finalText = (run as (Run & { finalText?: string }) | null)?.finalText;
+  // The scripted driver reports an outcome; the LLM driver does not, so derive it from the transcript.
+  const closedOk = steps.some((s) => s.tool === "close_session" && !s.output.error && s.output.receipt);
+  const outcome = run?.outcome ?? (run?.status === "done" ? (closedOk ? "closed" : opened ? "close-pending" : "no deal") : undefined);
   const lastDecision = [...steps].reverse().find((s) => s.tool === "propose")?.output.decision as string | undefined;
 
   return (
@@ -171,7 +174,7 @@ export default function Negotiate() {
             <h2 className="text-xl font-medium">Run</h2>
             <dl className="mt-3 space-y-1 text-sm">
               <div className="flex justify-between"><dt className="text-muted">Status</dt><dd>{run?.status ?? "–"}</dd></div>
-              <div className="flex justify-between"><dt className="text-muted">Outcome</dt><dd>{run?.outcome ?? "–"}</dd></div>
+              <div className="flex justify-between"><dt className="text-muted">Outcome</dt><dd>{outcome ?? "–"}</dd></div>
               <div className="flex justify-between"><dt className="text-muted">Payments</dt><dd>{o?.hspMode ?? "–"}</dd></div>
             </dl>
           </Card>
