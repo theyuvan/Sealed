@@ -1,4 +1,4 @@
-# Sealed: handoff (state on 2026-10-30)
+# Sealed: handoff (state on 2026-11-01)
 
 Hackathon: HSK Chain Horizon, Track 2 (Agent Payments & A2A Settlement, HSP). Deadline **Nov 1, 21:30 IST**.
 Repo: `theyuvan/Sealed` (private). Everything below is in `main`.
@@ -13,19 +13,18 @@ Repo: `theyuvan/Sealed` (private). Everything below is in `main`.
 | Coordinator (settlement) | Done. Two HSP routes: **HSP Agentic Payment (MCP, default)** and the older signed Merchant API |
 | HSP Agentic Payment client (`packages/core/src/hsp-mcp.ts`) | Done, tested against a stand-in that mimics the eight tools. **Never run against real HSP** |
 | Adversary evaluator + chart | Done |
-| Testnet (chain 133) deployment with official USDC | Done: escrow `0xA6b35F222f6efbA4441c298858Dc68f5e7B53bef`, token `0x8FE3cB719Ee4410E236Cd6b72ab1fCDC06eF53c6` (`contracts/deployments/133.json`) |
+| Testnet (chain 133) deployment with our own dUSDC | Done: dev token `0x45228277b06e657bC6b047BfD5B313b2c7C32020` ("Sealed Dev USD", 6 decimals, EIP-3009, mintable by the deployer), registry `0x64cF379bB7cA5231711877cEE34D69971928Ad38`, escrow `0x4e721e056B76f40CC2d9531E58d57a774e771C17` (`contracts/deployments/133.json`). Full purchase run end to end on the HSP local stand-in, and the frontend walked through in a browser (dashboard, negotiate, receipt, proof verify and tamper, attacks). **The official USDC deployment was never run or tested and is dropped** |
 | Frontend (`frontend/`, merged from `feat/frontend`) | Done and wired to the live backend: dashboard (seal/rotate/revoke), real negotiation runs, receipts with the spend proof (public signals, re-verify), attacks chart. Run: `npm run dev` then `npm run web` in `backend/` |
 
 Tests: `cd backend && NODE_OPTIONS=--experimental-sqlite npm test` (Node 22.12 needs that flag for `node:sqlite`; Foundry is installed by `npm run tools`).
 
-## What blocks the real run (only HashKey can unblock)
+## Scope decision (2026-11-01): stand-in and dUSDC only
 
-1. **IP allowlist.** `https://mcp-qa.hashkeymerchant.com/` is blocked (Cloudflare page) until HSP allowlists the machine's public egress IP. Run `npm run hsp:check` on the machine that will run the coordinator and buyer; it prints that IP. Send it to HSP. **Only that machine's network works**; another laptop or Wi-Fi needs its own IP added.
-2. **Test USDC** (`0x8FE3...53c6`) in the buyer wallet `0x9F6F7aF9Ff3008773b777509609EB761e4e5cb5F` (about 100 is plenty: deal cap 10, total budget 50). It holds 0 now.
-3. Answers to: is `gas_fee_advanced` true (no fee on top)? does the gateway relay a plain `transferWithAuthorization` to a contract `pay_to`?
-4. HSK for gas (faucet `hskchain.net/faucet`, unverified link): Vault wallet is lowest (0.0028 HSK).
+The demo runs on the **HSP local stand-in** with our own **dUSDC**. HSP does not settle that token, so real HSP is out of scope: the HSP IP allowlist, test USDC from HashKey, `HSP_BASE_URL` and the real-HSP purchase are no longer on the list. The MCP client for HSP Agentic Payment stays in the code, tested only against the stand-in, and was never run against real HSP. Say "HSP local stand-in" on screen everywhere (the UI already does).
 
-Team name for HSP is **`Sealed`** (`HSP_MERCHANT_NAME`), spelled identically at `create_order` and `query_payment`.
+Mint more dUSDC to the buyer: `cd backend && npm run fund -- --mint-dev <base units>` (6 decimals, so 1 dUSDC = 1000000). Balances: `npm run fund`.
+
+Team name for HSP is **`Sealed`** (`HSP_MERCHANT_NAME`).
 
 ## Setting up on another machine
 
@@ -42,14 +41,10 @@ Without any of that, `npm run dev` runs the entire flow locally on anvil with th
 
 ## What to do next, in order
 
-1. Send HSP the egress IP and the token/answers request above (draft in the chat history; ask them to allowlist several IPs if you may switch networks).
-2. When confirmed: `npm run hsp:check` must show no failures (tool list with the real argument names, token vs `get_chain_config`).
-3. `npm run fund` (balances), top up gas if needed, then `npm start` and `npm run e2e` for one real purchase. Expect to fix small things: the shapes of `get_chain_config`, `get_order` and `query_payment` results are parsed tolerantly but were never seen.
-4. Rotate the Gemini key that was shared in chat; the free tier allows 20 requests a day per model and one purchase uses about 13 to 15, so use a funded key for the demo.
-5. Run the two live-LLM tests when quota allows.
-6. Run the frontend against the testnet stack (`npm start`, `npm run web`), set `DATA_ASSETS` to real tokenized-asset contracts, record the demo (README section 13).
-7. Rehearse the recording with `npm run demo` (terminal) and the frontend (`npm run web`).
-8. If HSP never allowlists in time: demo on the local stand-in and say so on screen; the submission is weaker without real HSP.
+1. `cd backend && npm start` (the stand-in is on with `HSP_LOCAL_STANDIN=1` and `PINNED_TOKEN` empty in `backend/.env`), then `cd frontend && npm run dev`. Generate the Attacks chart data once: `cd backend && npx tsx services/adversary/src/main.ts`.
+2. Rotate the Gemini key that was shared in chat; the free tier allows 20 requests a day per model and one purchase uses about 13 to 15, so use a funded key for the LLM driver.
+3. Run the two live-LLM tests when quota allows, and try Rotate and Revoke in the dashboard (not yet exercised in a browser).
+4. Set `DATA_ASSETS` to real tokenized-asset contracts.
 
 ## Known limits (be honest about these in the submission)
 

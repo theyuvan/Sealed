@@ -76,11 +76,13 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 - [ ] **[Me]** Run the 2 live-LLM tests with Gemini when the quota allows
 - [ ] **[You / me]** Set `DATA_ASSETS` to real tokenized-asset contracts on HSK, so the sellers' data describes real assets
 - [ ] **[You]** Frontend (outside this backend work)
-- [ ] **[You]** Demo recording (README §13)
 
 ---
 
 ## Left
+
+### Dropped: real HSP and the official USDC (decision 2026-11-01)
+The demo runs on the HSP local stand-in with our own dUSDC (see the 2026-11-01 note below), so everything in this block is no longer planned. Kept for reference.
 
 ### Blocked on HashKey (HSP)
 - [ ] HSP merchant credentials: app key, app secret, webhook secret; register the merchant public key
@@ -96,10 +98,6 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 - [ ] Switch off the stand-in (`HSP_LOCAL_STANDIN=0`) and run the testnet purchase against real HSP
 - [ ] Host the coordinator's `/hsp/webhook` over HTTPS and register the URL with HashKey
 
-### Needs your approval (spends real funds)
-- [ ] Mainnet deploy (`npm run deploy -- --network mainnet`), then verify the contracts on Blockscout
-- [ ] One real mainnet settlement: proof → HSP funding → calls → close → receipt
-- [ ] Before mainnet: fill `backend/.env` for chain 177 (real keys, distinct Vault tokens, auditor key) and check the RPC's log-range limit (`LOGS_CHUNK`)
 
 ### After the hackathon (hardening)
 - [ ] Encrypt the Vault's SQLite database at rest (mandate secrets are stored in plain text locally)
@@ -116,3 +114,9 @@ Needs you: send HSP this machine's public egress IP for the QA allowlist (guide 
 ## 2026-10-30: frontend merged and connected
 
 `feat/frontend` merged into main. The app now talks to the live services through server-side route handlers (Vault admin token stays on the server): seal/rotate/revoke the mandate, run a real negotiation, list sessions, open receipts with the spend proof's 12 public signals, re-verify a proof (and see it fail when one signal changes), read the circuit's facts from the built artifacts. Backend additions: Vault `/meta`, `/proofs`, `/circuit/verify` (admin), coordinator `/sessions`; the Vault now records every proof. Checked end to end on the local stack (seal -> negotiate -> fund via the stand-in -> close -> receipt). Not yet checked: the same against testnet with real HSP, a browser-level UI test, and the LLM-driven run from the UI.
+
+## 2026-11-01: dUSDC on testnet, stand-in only
+
+Redeployed on testnet 133 with our own mintable dUSDC (`0x4522…2020`), 100 minted to the buyer, gas spread to the service wallets. One full purchase ran on the stand-in, and the frontend was walked through in a browser. Fixed: the dashboard's Reveal button never showed the values. The official USDC deployment was never run or tested and is dropped.
+
+Still to do: rotate the Gemini key; run the two live-LLM tests; try Rotate and Revoke in the browser; set `DATA_ASSETS`.
