@@ -76,7 +76,6 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 - [ ] **[Me]** Run the 2 live-LLM tests with Gemini when the quota allows
 - [ ] **[You / me]** Set `DATA_ASSETS` to real tokenized-asset contracts on HSK, so the sellers' data describes real assets
 - [ ] **[You]** Frontend (outside this backend work)
-- [ ] **[You]** Demo recording (README §13)
 
 ---
 
@@ -96,10 +95,6 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 - [ ] Switch off the stand-in (`HSP_LOCAL_STANDIN=0`) and run the testnet purchase against real HSP
 - [ ] Host the coordinator's `/hsp/webhook` over HTTPS and register the URL with HashKey
 
-### Needs your approval (spends real funds)
-- [ ] Mainnet deploy (`npm run deploy -- --network mainnet`), then verify the contracts on Blockscout
-- [ ] One real mainnet settlement: proof → HSP funding → calls → close → receipt
-- [ ] Before mainnet: fill `backend/.env` for chain 177 (real keys, distinct Vault tokens, auditor key) and check the RPC's log-range limit (`LOGS_CHUNK`)
 
 ### After the hackathon (hardening)
 - [ ] Encrypt the Vault's SQLite database at rest (mandate secrets are stored in plain text locally)
