@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Logo } from "./Logo";
+import { WalletButton } from "./WalletButton";
 import { usePoll, type Overview } from "@/lib/api";
 
 const links = [
@@ -36,6 +37,7 @@ export function Nav() {
           <span className="hidden rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-muted sm:inline">
             <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${live ? "bg-up" : "bg-down"}`} />{badge}
           </span>
+          <WalletButton />
           <Link href="/dashboard" className="btn btn-blue !py-2.5">Open app</Link>
         </div>
       </div>

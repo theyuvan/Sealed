@@ -94,6 +94,15 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
                 <button className="btn btn-ghost !py-2.5" disabled={busy} onClick={() => verify("Same proof with the amount changed", p.rawPublicSignals.map((s, i) => (i === amountIdx ? String(BigInt(s) + 1n) : s)))}>Try with amount + 1</button>
               </div>
               {check && <div className={`mt-3 rounded-lg p-3 text-sm ${check.valid ? "bg-[#e6f6ee] text-up" : "bg-[#fbe9ea] text-down"}`}>{check.label}: {check.valid ? "valid" : "rejected"}</div>}
+              <div className="mt-4 rounded-lg bg-surface p-3 text-xs text-muted">
+                <div className="font-medium text-ink">What the chain checked when the session opened</div>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  <li>The Groth16 proof is valid for these 12 public signals.</li>
+                  <li>The mandate commitment is in the on-chain Merkle tree and not revoked.</li>
+                  <li>The nullifier was unused, so this proof cannot be replayed.</li>
+                  <li>The amount and cart hash match what the seller signed.</li>
+                </ul>
+              </div>
               <p className="mt-3 text-xs text-muted">The second button shows the binding: change any public signal and the same proof no longer verifies, which is why a swapped cart or amount reverts on chain.</p>
             </>
           )}
