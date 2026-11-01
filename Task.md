@@ -81,6 +81,9 @@ Three sections: **Done** (built and tested), **To do next** (can start now; owne
 
 ## Left
 
+### Dropped: real HSP and the official USDC (decision 2026-11-01)
+The demo runs on the HSP local stand-in with our own dUSDC (see the 2026-11-01 note below), so everything in this block is no longer planned. Kept for reference.
+
 ### Blocked on HashKey (HSP)
 - [ ] HSP merchant credentials: app key, app secret, webhook secret; register the merchant public key
 - [ ] Open HSP details only HashKey can answer: the `pay-mandate` request body, the `user_authorization` format (AP2 SD-JWT-VC vs our HS256 guess), and fee handling. Everything else from the old `TODO(HSP-DOCS)` list is now verified (see RUNNING.md).
@@ -111,3 +114,9 @@ Needs you: send HSP this machine's public egress IP for the QA allowlist (guide 
 ## 2026-10-30: frontend merged and connected
 
 `feat/frontend` merged into main. The app now talks to the live services through server-side route handlers (Vault admin token stays on the server): seal/rotate/revoke the mandate, run a real negotiation, list sessions, open receipts with the spend proof's 12 public signals, re-verify a proof (and see it fail when one signal changes), read the circuit's facts from the built artifacts. Backend additions: Vault `/meta`, `/proofs`, `/circuit/verify` (admin), coordinator `/sessions`; the Vault now records every proof. Checked end to end on the local stack (seal -> negotiate -> fund via the stand-in -> close -> receipt). Not yet checked: the same against testnet with real HSP, a browser-level UI test, and the LLM-driven run from the UI.
+
+## 2026-11-01: dUSDC on testnet, stand-in only
+
+Redeployed on testnet 133 with our own mintable dUSDC (`0x4522…2020`), 100 minted to the buyer, gas spread to the service wallets. One full purchase ran on the stand-in, and the frontend was walked through in a browser. Fixed: the dashboard's Reveal button never showed the values. The official USDC deployment was never run or tested and is dropped.
+
+Still to do: rotate the Gemini key; run the two live-LLM tests; try Rotate and Revoke in the browser; set `DATA_ASSETS`.
