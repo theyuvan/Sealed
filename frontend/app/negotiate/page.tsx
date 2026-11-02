@@ -97,7 +97,10 @@ export default function Negotiate() {
   // The scripted driver reports an outcome; the LLM driver does not, so derive it from the transcript.
   const closedOk = steps.some((s) => s.tool === "close_session" && !s.output.error && s.output.receipt);
   const outcome = run?.outcome ?? (run?.status === "done" ? (closedOk ? "closed" : opened ? "close-pending" : "no deal") : undefined);
-  const lastDecision = [...steps].reverse().find((s) => s.tool === "propose")?.output.decision as string | undefined;
+  const rounds = steps
+    .filter((s) => s.tool === "propose" && !s.output.error)
+    .map((s) => ({ decision: String(s.output.decision), offer: s.output.decision === "counter" ? String(s.output.counter_offer_display ?? s.output.counter_offer ?? "") : "" }));
+  const lastDecision =[...steps].reverse().find((s) => s.tool === "propose")?.output.decision as string | undefined;
 
   return (
     <div className="mx-auto max-w-[1440px] px-6 py-12">
@@ -169,6 +172,24 @@ export default function Negotiate() {
               <li className="flex justify-between"><span>Latest decision</span><Pill tone="blue">{lastDecision ?? "–"}</Pill></li>
             </ul>
             <p className="mt-4 text-xs text-muted">The buyer agent holds a token that can only call four Vault routes. Mandate routes answer 403 to it.</p>
+          </Card>
+          <Card>
+            <h2 className="text-xl font-medium">Decision trail</h2>
+            {rounds.length === 0 ? <p className="mt-3 text-sm text-muted">No proposals yet.</p> : (
+              <ol className="mt-3 space-y-2 text-sm">
+                {rounds.map((r, i) => (
+                  <li key={i} className="flex items-center justify-between gap-3">
+                    <span className="text-muted">Round {i + 1}</span>
+                    <span className="flex items-center gap-2">
+                      {r.offer && <span className="mono text-xs">{r.offer}</span>}
+                      <Pill tone={r.decision === "accept" ? "green" : r.decision === "counter" ? "blue" : "red"}>{r.decision}</Pill>
+                    </span>
+                  </li>
+                ))}
+                {opened && <li className="flex justify-between"><span className="text-muted">Proof</span><Pill tone="green">verified on chain</Pill></li>}
+                {closedOk && <li className="flex justify-between"><span className="text-muted">Settlement</span><Pill tone="green">closed</Pill></li>}
+              </ol>
+            )}
           </Card>
           <Card>
             <h2 className="text-xl font-medium">Run</h2>
