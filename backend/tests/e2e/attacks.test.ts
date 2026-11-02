@@ -1,4 +1,4 @@
-// E2E: every rogue attack from README 9.3 must fail.
+// E2E: every rogue attack from docs/DESIGN.md 9.3 must fail.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { type Hex, decodeFunctionData } from "viem";
 import { mandateRegistryAbi, sessionEscrowAbi } from "@sealed/core";

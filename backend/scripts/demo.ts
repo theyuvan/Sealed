@@ -1,4 +1,4 @@
-// Narrated demo of README section 13, against a running stack (npm run dev, or npm start on testnet):
+// Narrated demo of docs/DESIGN.md section 13, against a running stack (npm run dev, or npm start on testnet):
 //   npm run demo                 pauses between steps (for a screen recording)
 //   npm run demo -- --fast       no pauses
 //   npm run demo -- --local      the local stack from `npm run dev` (.env.local)

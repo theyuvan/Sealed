@@ -52,7 +52,7 @@ export interface DeliveryCheck {
   reasons: string[];
 }
 
-/** Deterministic delivery check (README 9.2). A voucher is signed only when this passes. */
+/** Deterministic delivery check (docs/DESIGN.md 9.2). A voucher is signed only when this passes. */
 export function checkDelivery(o: { serviceId: string; body: string; committedHash: string; latencyMs: number; timeoutMs: number; sessionId: string; expectedCall: number; chainId: number }): DeliveryCheck {
   const reasons: string[] = [];
   if (keccak256(stringToHex(o.body)) !== o.committedHash) reasons.push("delivery hash does not match the pre-committed hash");

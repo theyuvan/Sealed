@@ -74,7 +74,7 @@ export const HSP_DEFAULT_HEADERS: HspConfig["headers"] = {
   webhookSignature: "X-Signature",
 };
 
-/** Max age of a webhook (README 9.4). */
+/** Max age of a webhook (docs/DESIGN.md 9.4). */
 export const HSP_WEBHOOK_MAX_AGE_SECONDS = 300;
 
 export interface HspAmount {
