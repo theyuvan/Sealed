@@ -1,6 +1,6 @@
 # Sealed backend: running, testing, deploying
 
-The spec is [README.md](../README.md). This file covers how to run the backend, where the code departs from the spec and why, what's still unverified, and how to deploy.
+The original spec is [docs/DESIGN.md](../docs/DESIGN.md); the project overview is [README.md](../README.md). This file covers how to run the backend, where the code departs from the spec and why, what's still unverified, and how to deploy.
 
 ## Layout
 
@@ -73,7 +73,7 @@ Notes from the testnet runs:
 - Gemini free tier: 20 requests/day per model, and one purchase is about 13–15 requests. Change `GEMINI_MODEL` or enable billing when it runs out.
 - `npm run e2e:local` runs against the local stack from `npm run dev` (`.env.local`).
 
-## Terminal demo (README section 13)
+## Terminal demo (DESIGN section 13)
 
 `npm run demo` (add `-- --fast` to skip the pauses, `-- --local` for the `npm run dev` stack) plays the 3-minute script against the running services: seal a mandate, show the agent token refused on the mandate routes, print the adversary chart, run an honest purchase through the buyer agent, then print the receipt and re-verify the spend proof (valid, and rejected with the amount changed). Everything printed comes from the live services. It does not run the rogue-seller attacks; those are `npm run test:e2e`.
 
@@ -130,7 +130,7 @@ npm test   # = test:core, test:circuits, test:contracts (forge), test:services, 
 | circuits | 12 | Valid spend; over per-deal cap; over remaining budget; seller not allowed; wrong category; wrong token; expired; reused or forged nullifier; revoked or forged tag; wrong root; public-signal binding |
 | contracts | 52 | Unit and fuzz tests (512 runs each); real-proof tests with the generated verifier; 6 invariants (128 runs × depth 64) |
 | services | 41 + 1 skipped | Vault (real proofs on anvil), coordinator (real stand-in + webhooks + polling), sellers, buyer agent (full stack), adversary |
-| e2e | 9 + 1 skipped | Happy path; one test group per rogue attack (README 9.3); all attacks fail |
+| e2e | 9 + 1 skipped | Happy path; one test group per rogue attack (DESIGN 9.3); all attacks fail |
 
 The 2 skipped tests drive the real Claude model. They run when `ANTHROPIC_API_KEY` or `LLM_API_KEY` is set (this costs API credit).
 
@@ -143,7 +143,7 @@ Adversary result (2,000 simulated negotiations, a seller that never concedes):
 
 Sealed reduces behavioral leakage; it does not eliminate it.
 
-## Where the code differs from the README, and why
+## Where the code differs from the design doc, and why
 
 1. **Revocation.** The registry has `revoke(revocationKey)`, not `revoke(commitment, ownerSig)`. The two README formulas also disagree (§7.1 vs §8).
    - The circuit publishes `revTag = Poseidon(revKey)`, with `revKey = Poseidon(mandateId, ownerSecret)`.

@@ -1,6 +1,6 @@
 import { type Address, type PublicClient, erc20Abi, parseAbiItem } from "viem";
 
-// Data products read live from the chain over RPC (README 9.3: "real sources on HSK where possible").
+// Data products read live from the chain over RPC (docs/DESIGN.md 9.3: "real sources on HSK where possible").
 
 const TRANSFER = parseAbiItem("event Transfer(address indexed from, address indexed to, uint256 value)");
 

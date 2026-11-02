@@ -53,4 +53,4 @@ Without any of that, `npm run dev` runs the entire flow locally on anvil with th
 - The trusted setup is a development one. The Vault database is not encrypted at rest. One merchant identity serves all sellers.
 - The buyer MCP server was tested in memory and over stdio, not inside a real Claude Desktop.
 
-More detail: `backend/RUNNING.md` (running, HSP wire details), `README.md` (design), `Task.md` (checklist).
+More detail: `backend/RUNNING.md` (running, HSP wire details), `README.md` (overview), `docs/DESIGN.md` (original design), `Task.md` (checklist).

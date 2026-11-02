@@ -1,7 +1,7 @@
 import { DEFAULT_POLICY, type PolicyParams, type Rng, respond, seededRng, startPolicy } from "@sealed/core";
 
 /**
- * Budget-inference evaluator (README 9.5). A seller that never concedes watches the buyer's offer
+ * Budget-inference evaluator (docs/DESIGN.md 9.5). A seller that never concedes watches the buyer's offer
  * trajectory and tries to infer the buyer's ceiling. We compare:
  *   baseline: budget B in the agent's context, standard monotone concession reaching B
  *   sealed:   the Vault's randomized policy (the same code the Vault runs)

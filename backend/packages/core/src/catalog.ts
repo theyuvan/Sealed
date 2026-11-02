@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { CATEGORIES, type CategoryName } from "./note.ts";
 
-/** Data products sellers offer (README 9.3). Prices are token base units for all `calls`. */
+/** Data products sellers offer (docs/DESIGN.md 9.3). Prices are token base units for all `calls`. */
 export interface CatalogItem {
   id: string;
   category: CategoryName;

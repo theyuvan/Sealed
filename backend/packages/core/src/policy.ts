@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 
 /**
- * Randomized concession policy (README F4). Runs only inside the Vault; the buyer LLM sees only
+ * Randomized concession policy (docs/DESIGN.md F4). Runs only inside the Vault; the buyer LLM sees only
  * `decision` and `offer`.
  *
  *   theta = min(maxRemaining, perDealCap)

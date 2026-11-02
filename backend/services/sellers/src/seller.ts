@@ -43,7 +43,7 @@ export interface PricedItem extends CatalogItem {
   reservePrice: bigint;
 }
 
-/** Rogue behaviours (README 9.3). An honest seller has none of these. */
+/** Rogue behaviours (docs/DESIGN.md 9.3). An honest seller has none of these. */
 export interface RogueOptions {
   /** (1) prompt-injection text in quotes and the agent card */
   injection?: boolean;
