@@ -1,7 +1,7 @@
 // All data here is simulated. Replace with calls to the Vault / coordinator
 // (see backend/services/*/src/server.ts) once the backend is wired up.
 
-export const EXPLORER = "https://testnet-explorer.hsk.xyz";
+export const EXPLORER = "https://testnet-explorer.hskchain.net";
 
 export const mandate = {
   status: "sealed" as "sealed" | "revoked",

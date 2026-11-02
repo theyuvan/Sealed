@@ -123,7 +123,7 @@ Stack: Solidity 0.8.24 + Foundry, Circom 2 + snarkjs (Groth16, BN254), TypeScrip
 |---|---|---|
 | Chain ID | 177 | 133 |
 | RPC | `https://mainnet.hsk.xyz` | `https://testnet.hsk.xyz` |
-| Explorer | `https://hashkey.blockscout.com` | `https://testnet-explorer.hsk.xyz` |
+| Explorer | `https://hashkey.blockscout.com` | `https://testnet-explorer.hskchain.net` |
 | Gas token | HSK (18 decimals) | HSK (faucet: `https://hsk.xyz/faucet`) |
 
 HSK Chain is an OP Stack L2 and EVM-equivalent; standard Foundry deploys work (use `--legacy` if EIP-1559 estimation fails).

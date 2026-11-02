@@ -51,7 +51,7 @@ export const config = {
   probeLimit: Number(env("VAULT_GLOBAL_PROBE_LIMIT", "40")),
   hspMode: env("HSP_LOCAL_STANDIN") === "1" ? "HSP local stand-in" : "HSP",
   // override with EXPLORER_URL if the default host is not the right Blockscout instance
-  explorer: (env("EXPLORER_URL") || (chainId === 133 ? "https://testnet-explorer.hsk.xyz" : chainId === 177 ? "https://hashkey.blockscout.com" : "")).replace(/\/+$/, ""),
+  explorer: (env("EXPLORER_URL") || (chainId === 133 ? "https://testnet-explorer.hskchain.net" : chainId === 177 ? "https://hashkey.blockscout.com" : "")).replace(/\/+$/, ""),
 };
 
 export class BackendError extends Error {
